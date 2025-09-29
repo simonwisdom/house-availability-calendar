@@ -30,8 +30,10 @@ const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
 function authModeForRoute(method: string, pathname: string): AuthMode {
   if (method === "OPTIONS") return "public";
   if (pathname === "/health") return "public";
+  if (pathname === "/auth/google/start") return "public";
   if (pathname === "/auth/google/callback") return "public";
   if (pathname === "/household/login") return "public";
+  if (pathname === "/api/availability") return "public";
   if (pathname === "/household/logout") return "page";
   if (pathname.startsWith("/api/")) return "api";
   if (pathname.startsWith("/auth/")) return "page";

@@ -137,18 +137,10 @@
         border-radius: 8px;
         font-weight: 500;
         font-size: 0.95rem;
-        transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        transition: background 0.2s ease;
       }
       .connect-btn:hover {
         background: #357ae8;
-      }
-      .connect-btn.secondary {
-        background: transparent;
-        color: #1a73e8;
-        border: 1px solid rgba(66, 133, 244, 0.45);
-      }
-      .connect-btn.secondary:hover {
-        background: rgba(66, 133, 244, 0.08);
       }
 
       /* Blur and overlay styles */
@@ -216,16 +208,9 @@
     <div id="connect-overlay" class="connect-overlay" style="display: none;">
       <h2>Welcome to House Availability</h2>
       <p>Connect your Google Calendar to see when housemates are free for events.</p>
-      <p id="auth-hint" style="display: none; color: #1d4ed8; font-weight: 500;">Enter the household passphrase to unlock the dashboard first.</p>
-      <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center;">
-        <a class="connect-btn"
-           id="overlay-connect"
-           href="https://house-availability.simonwisdom.workers.dev/auth/google/start">Connect Google Calendar</a>
-        <a class="connect-btn secondary"
-           id="unlock-button"
-           href="https://house-availability.simonwisdom.workers.dev/household/login"
-           style="display: none;">Unlock with passphrase</a>
-      </div>
+      <a class="connect-btn"
+         id="overlay-connect"
+         href="https://house-availability.simonwisdom.workers.dev/auth/google/start">Connect Google Calendar</a>
     </div>
     <script>
       const workerOrigin = (() => {
@@ -252,17 +237,12 @@
       const legend = document.getElementById("legend");
       const connectButton = document.getElementById("connect-button");
       const overlayConnect = document.getElementById("overlay-connect");
-      const unlockButton = document.getElementById("unlock-button");
-      const authHint = document.getElementById("auth-hint");
 
       if (connectButton) {
         connectButton.href = `${workerOrigin}/auth/google/start`;
       }
       if (overlayConnect) {
         overlayConnect.href = `${workerOrigin}/auth/google/start`;
-      }
-      if (unlockButton) {
-        unlockButton.href = `${workerOrigin}/household/login`;
       }
 
       function formatDate(dateStr) {
@@ -411,11 +391,6 @@
             credentials: "include"
           });
 
-          if (response.status === 401) {
-            showConnectState({ needsAuth: true });
-            return;
-          }
-
           if (!response.ok) {
             showConnectState();
             return;
@@ -446,21 +421,13 @@
         }
       }
 
-      function showConnectState(options = {}) {
-        const { needsAuth = false } = options;
+      function showConnectState() {
         // Show connect button in header
         document.getElementById('connect-button').style.display = 'inline-block';
         document.getElementById('last-updated').style.display = 'none';
 
         // Show overlay
         document.getElementById('connect-overlay').style.display = 'block';
-
-        if (authHint) {
-          authHint.style.display = needsAuth ? 'block' : 'none';
-        }
-        if (unlockButton) {
-          unlockButton.style.display = needsAuth ? 'inline-block' : 'none';
-        }
 
         // Blur the grid
         document.getElementById('heat-grid').classList.add('blur-mode');
@@ -476,12 +443,6 @@
         document.getElementById('connect-overlay').style.display = 'none';
         document.getElementById('heat-grid').classList.remove('blur-mode');
         document.getElementById('legend').classList.remove('blur-mode');
-        if (authHint) {
-          authHint.style.display = 'none';
-        }
-        if (unlockButton) {
-          unlockButton.style.display = 'none';
-        }
       }
 
       function renderPlaceholderGrid() {
