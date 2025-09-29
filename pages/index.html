@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>House Availability – Connect Calendar</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 2rem 1rem 4rem;
+        display: flex;
+        justify-content: center;
+      }
+      main {
+        width: min(420px, 100%);
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+      header {
+        text-align: center;
+      }
+      .card {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.75);
+        backdrop-filter: blur(8px);
+      }
+      button {
+        padding: 0.85rem 1.1rem;
+        font-size: 1rem;
+        border-radius: 8px;
+        border: none;
+        background: #1a73e8;
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(1.05);
+      }
+      .status {
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+      }
+      .status.success {
+        background: rgba(16, 185, 129, 0.12);
+        color: #0f5132;
+      }
+      .status.error {
+        background: rgba(220, 38, 38, 0.12);
+        color: #842029;
+      }
+      .hint {
+        font-size: 0.9rem;
+        color: rgba(0, 0, 0, 0.68);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Connect Your Google Calendar</h1>
+        <p class="hint">Grant read-only access so we can compute free evenings between 18:00–22:00.</p>
+      </header>
+      <section id="status" class="card" hidden></section>
+      <section class="card">
+        <form action="/auth/google/start" method="get" id="connect-form">
+          <p>
+            We request only the <strong>Calendar read-only</strong> scope and use Google&rsquo;s FreeBusy API, so event
+            details never leave your account.
+          </p>
+          <button type="submit">Continue with Google</button>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Already connected?</h2>
+        <p class="hint">
+          If you updated your schedule and want a fresh sync right away, ask the house admin to use the
+          manual sync tool. Nightly updates happen automatically around 06:00 London time.
+        </p>
+      </section>
+    </main>
+    <script>
+      (function adaptFormForLocal() {
+        const form = document.getElementById("connect-form");
+        if (!form) return;
+        const { protocol, hostname, port } = window.location;
+        if (port === "8788") {
+          form.action = `${protocol}//${hostname}:8787/auth/google/start`;
+        }
+      })();
+
+      const params = new URLSearchParams(window.location.search);
+      const status = params.get("status");
+      const statusEl = document.getElementById("status");
+      if (status === "success") {
+        statusEl.hidden = false;
+        statusEl.className = "card status success";
+        statusEl.textContent = "All set! Your calendar is connected. You can close this tab.";
+      } else if (status === "error") {
+        statusEl.hidden = false;
+        statusEl.className = "card status error";
+        statusEl.textContent = "Something went wrong while connecting your calendar. Please try again.";
+      }
+    </script>
+  </body>
+</html>

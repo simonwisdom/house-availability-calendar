@@ -1,0 +1,12 @@
+name = "house-availability"
+main = "src/worker.ts"
+compatibility_date = "2024-05-01"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["0 5 * * *"] # 05:00 UTC ≈ 06:00 London during winter
+
+[[d1_databases]]
+binding = "DB"
+database_name = "house_availability"
+database_id = "TBD"

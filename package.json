@@ -1,0 +1,22 @@
+{
+  "name": "house-availability",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "fmt": "prettier --write .",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240512.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.0",
+    "wrangler": "^4.40.2"
+  },
+  "dependencies": {
+    "date-fns": "^2.30.0",
+    "date-fns-tz": "^2.0.1"
+  }
+}
