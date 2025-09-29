@@ -406,12 +406,6 @@
       }
 
       async function loadAvailability() {
-        const workerOrigin = (function () {
-          const { protocol, hostname, port } = window.location;
-          if (port === "8788") return `${protocol}//${hostname}:8787`;
-          return "https://house-availability.simonwisdom.workers.dev";
-        })();
-
         try {
           const response = await fetch(`${workerOrigin}/api/availability`, {
             credentials: "include"
