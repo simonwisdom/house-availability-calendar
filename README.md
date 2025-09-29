@@ -54,7 +54,6 @@ Early scaffolding for the Cloudflare-based house availability heat map described
 - `npm run fmt` — format the project with Prettier.
 
 ## Next Steps
-- Add household authentication/guard rails before exposing the connect page and manual sync endpoint.
 - Build an admin control that invokes `POST /api/manual-sync` so trusted users can trigger immediate refreshes.
 - Enhance the dashboard heat map with legend toggles, per-person filters, and kiosk-friendly layout tweaks.
 - Layer in testing (unit for overlap logic, integration for sync flows) and monitoring around `sync_runs`.
@@ -64,5 +63,5 @@ Early scaffolding for the Cloudflare-based house availability heat map described
 
 ## Cloudflare Pages
 - Static assets live under `pages/`; deploy them via Cloudflare Pages and route the domain so `/auth/google/start` hits the Worker while `/` serves the static HTML.
-- `pages/index.html` provides a minimal “Connect with Google” UI and surfaces success/error feedback based on the `status` query string. For local dev it auto-swaps the form action to the Worker port (8787).
-- `pages/dashboard.html` consumes `/api/availability` and renders a simple heat map using an inline palette so you can preview the data before building a richer SPA. During local dev it points the fetch at port 8787 automatically.
+- `pages/index.html` is the primary dashboard: it fetches `/api/availability`, renders the heat map, and falls back to a connect overlay (with placeholder data) when no calendars are linked. In local dev it automatically targets the Worker on port 8787.
+- `pages/dashboard.html` remains as an alternate view for development reference; it consumes the same API endpoint but keeps the original layout for quick comparisons.

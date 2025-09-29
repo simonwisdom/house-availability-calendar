@@ -20,14 +20,19 @@ export type BusyWindow = {
 export async function performFreeBusySync(env: Env, user: UserSyncContext): Promise<void> {
   const timezone = env.HOUSE_TIMEZONE || DEFAULT_TIMEZONE;
   const nowIso = new Date().toISOString();
-  const syncId = crypto.randomUUID();
 
-  await env.DB.prepare(
+  const insertResult = await env.DB.prepare(
     `INSERT INTO sync_runs (id, user_id, started_at, status, message)
-     VALUES (?, ?, ?, ?, NULL)`
+     VALUES (NULL, ?, ?, ?, NULL)`
   )
-    .bind(syncId, user.id, nowIso, "running")
+    .bind(user.id, nowIso, "running")
     .run();
+
+  const syncId = insertResult.meta?.last_row_id;
+
+  if (typeof syncId !== "number") {
+    throw new Error("Unable to determine sync run id");
+  }
 
   try {
     const { timeMinIso, timeMaxIso, dateStrings } = buildSyncWindow(timezone);
@@ -94,35 +99,36 @@ function addDaysToDateString(dateStr: string, days: number): string {
 function normalizeWindows(windows: BusyWindow[]): BusyWindow[] {
   return windows
     .map((window) => {
-      const startIso = toIsoOrNull(window.start);
-      const endIso = toIsoOrNull(window.end);
-      if (!startIso || !endIso) {
+      try {
+        const startDate = new Date(window.start);
+        const endDate = new Date(window.end);
+
+        if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+          return undefined;
+        }
+
+        const startIso = startDate.toISOString();
+        const endIso = endDate.toISOString();
+
+        if (Date.parse(endIso) <= Date.parse(startIso)) {
+          return undefined;
+        }
+
+        return { start: startIso, end: endIso };
+      } catch (error) {
+        console.warn("Failed to parse date", { start: window.start, end: window.end, error });
         return undefined;
       }
-      if (Date.parse(endIso) <= Date.parse(startIso)) {
-        return undefined;
-      }
-      return { start: startIso, end: endIso };
     })
     .filter((window): window is BusyWindow => Boolean(window))
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
-function toIsoOrNull(value: string): string | null {
-  try {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString();
-  } catch (error) {
-    console.warn("Failed to parse date", { value, error });
-    return null;
-  }
-}
 
 async function persistFreeBusyWindows(
   env: Env,
   userId: string,
-  syncId: string,
+  syncId: number,
   windows: BusyWindow[],
   timeMinIso: string,
   timeMaxIso: string,
@@ -144,9 +150,8 @@ async function persistFreeBusyWindows(
   const statements = windows.map((window) =>
     env.DB.prepare(
       `INSERT INTO freebusy_windows (id, user_id, start_at, end_at, source, sync_run_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      crypto.randomUUID(),
       userId,
       window.start,
       window.end,

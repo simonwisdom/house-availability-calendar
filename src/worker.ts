@@ -701,11 +701,10 @@ function determineUserEmail(claimEmail: string | undefined, calendarId: string):
   throw new Error("Unable to determine user email from Google response");
 }
 
-function buildRedirectUrl(baseUrl: string, status: "success" | "error"): string {
+function buildRedirectUrl(baseUrl: string, _status: "success" | "error"): string {
   const target = baseUrl?.trim() || "https://example.com";
-  const url = new URL(target);
-  url.searchParams.set("status", status);
-  return url.toString();
+  // Just return the base URL without status query param since we're showing status via the dashboard
+  return new URL(target).toString();
 }
 
 async function queueInitialSync(env: Env, userId: string): Promise<void> {

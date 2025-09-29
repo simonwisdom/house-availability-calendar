@@ -1,6 +1,6 @@
 import type { Env } from "./env";
 
-export type GoogleTokenResponse = {
+type GoogleTokenResponse = {
   access_token: string;
   expires_in: number;
   refresh_token?: string;
@@ -9,22 +9,14 @@ export type GoogleTokenResponse = {
   id_token?: string;
 };
 
-export type GoogleRefreshResponse = {
+type GoogleRefreshResponse = {
   access_token: string;
   expires_in: number;
   scope: string;
   token_type: string;
 };
 
-export type GoogleCalendarListResponse = {
-  items?: Array<{
-    id: string;
-    summary?: string;
-    primary?: boolean;
-  }>;
-};
-
-export async function exchangeCodeForTokens(env: Env, code: string): Promise<GoogleTokenResponse> {
+export async function exchangeCodeForTokens(env: Env, code: string) {
   const body = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     client_secret: env.GOOGLE_CLIENT_SECRET,
@@ -52,7 +44,7 @@ export async function exchangeCodeForTokens(env: Env, code: string): Promise<Goo
   return json;
 }
 
-export async function fetchPrimaryCalendar(accessToken: string): Promise<{ id: string; summary: string | undefined }> {
+export async function fetchPrimaryCalendar(accessToken: string) {
   const response = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -62,7 +54,13 @@ export async function fetchPrimaryCalendar(accessToken: string): Promise<{ id: s
     throw new Error(`Fetching calendar list failed: ${response.status} ${errorText}`);
   }
 
-  const json = (await response.json()) as GoogleCalendarListResponse;
+  const json = (await response.json()) as {
+    items?: Array<{
+      id: string;
+      summary?: string;
+      primary?: boolean;
+    }>;
+  };
   const primary = json.items?.find((item) => item.primary) || json.items?.[0];
 
   if (!primary) {
@@ -72,7 +70,7 @@ export async function fetchPrimaryCalendar(accessToken: string): Promise<{ id: s
   return { id: primary.id, summary: primary.summary };
 }
 
-export async function refreshAccessToken(env: Env, refreshToken: string): Promise<GoogleRefreshResponse> {
+export async function refreshAccessToken(env: Env, refreshToken: string) {
   const body = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     client_secret: env.GOOGLE_CLIENT_SECRET,
@@ -94,25 +92,13 @@ export async function refreshAccessToken(env: Env, refreshToken: string): Promis
   return (await response.json()) as GoogleRefreshResponse;
 }
 
-export type GoogleFreeBusyResponse = {
-  calendars: Record<
-    string,
-    {
-      busy: Array<{
-        start: string;
-        end: string;
-      }>;
-    }
-  >;
-};
-
 export async function fetchFreeBusy(
   accessToken: string,
   calendarId: string,
   timeMinIso: string,
   timeMaxIso: string,
   timezone: string
-): Promise<Array<{ start: string; end: string }>> {
+) {
   const response = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
     headers: {
@@ -132,7 +118,17 @@ export async function fetchFreeBusy(
     throw new Error(`FreeBusy fetch failed: ${response.status} ${errorText}`);
   }
 
-  const json = (await response.json()) as GoogleFreeBusyResponse;
+  const json = (await response.json()) as {
+    calendars: Record<
+      string,
+      {
+        busy: Array<{
+          start: string;
+          end: string;
+        }>;
+      }
+    >;
+  };
   const calendar = json.calendars?.[calendarId];
   if (!calendar) {
     return [];

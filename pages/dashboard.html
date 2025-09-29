@@ -303,7 +303,7 @@
         const workerOrigin = (function () {
           const { protocol, hostname, port } = window.location;
           if (port === "8788") return `${protocol}//${hostname}:8787`;
-          return `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+          return "https://house-availability.simonwisdom.workers.dev";
         })();
 
         try {
