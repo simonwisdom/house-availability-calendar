@@ -40,6 +40,13 @@ Early scaffolding for the Cloudflare-based house availability heat map described
 - When building the authorize link, include scopes `openid email profile https://www.googleapis.com/auth/calendar.readonly`, and set `access_type=offline` plus `prompt=consent` so Google returns a refresh token.
 - Point the authorize link at `/auth/google/callback` on this Worker (e.g., `https://<worker>.workers.dev/auth/google/callback`).
 
+## Deployment via GitHub Actions
+- Connect this repo to Cloudflare Workers by adding two GitHub secrets:
+  - `CLOUDFLARE_API_TOKEN`: Worker deploy token with `Account · Workers Scripts = Edit`. You can generate this from the Cloudflare dashboard.
+  - `CLOUDFLARE_ACCOUNT_ID`: The Cloudflare account id (visible in the dashboard or via `wrangler whoami`).
+- On every push to `main`, `.github/workflows/deploy.yml` installs dependencies and runs `wrangler deploy`.
+- You can also trigger the workflow manually through the GitHub UI (`Actions → Deploy Worker → Run workflow`).
+
 ## Development Commands
 - `npm run dev` — run the Worker locally with `wrangler dev`.
 - `npm run deploy` — deploy the Worker to Cloudflare (ensure bindings and secrets are configured first).
