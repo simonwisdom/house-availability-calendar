@@ -1,21 +1,20 @@
 import { formatInTimeZone, zonedTimeToUtc } from "date-fns-tz";
 import type { Env } from "./env";
-import { fetchFreeBusy, refreshAccessToken } from "./google";
+import { createProvider, type BusyWindow, type CalendarProviderType, type UserCredentials } from "./providers/base";
 
 export const DEFAULT_TIMEZONE = "Europe/London";
 export const HORIZON_DAYS = 28;
-const SOURCE_LABEL = "google-freebusy";
 
 export type UserSyncContext = {
   id: string;
+  provider: CalendarProviderType;
   calendarId: string;
   refreshToken: string;
+  caldavUrl?: string;
+  caldavUsername?: string;
 };
 
-export type BusyWindow = {
-  start: string;
-  end: string;
-};
+export type { BusyWindow };
 
 export async function performFreeBusySync(env: Env, user: UserSyncContext): Promise<void> {
   const timezone = env.HOUSE_TIMEZONE || DEFAULT_TIMEZONE;
@@ -36,12 +35,46 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
 
   try {
     const { timeMinIso, timeMaxIso, dateStrings } = buildSyncWindow(timezone);
-    const tokenResponse = await refreshAccessToken(env, user.refreshToken);
-    const busyWindows = await fetchFreeBusy(tokenResponse.access_token, user.calendarId, timeMinIso, timeMaxIso, timezone);
 
-    const normalizedWindows = normalizeWindows(busyWindows);
+    // Fetch user's selected calendars
+    const { results: userCalendars } = await env.DB.prepare(
+      `SELECT calendar_id as calendarId FROM user_calendars WHERE user_id = ?`
+    )
+      .bind(user.id)
+      .all<{ calendarId: string }>();
 
-    await persistFreeBusyWindows(env, user.id, syncId, normalizedWindows, timeMinIso, timeMaxIso, nowIso);
+    // If no calendars selected yet, fall back to the primary calendar_id from users table
+    const calendarIds = userCalendars && userCalendars.length > 0
+      ? userCalendars.map((c) => c.calendarId)
+      : [user.calendarId];
+
+    const provider = createProvider(env, user.provider);
+
+    // Fetch busy windows from all selected calendars
+    const allBusyWindows: BusyWindow[] = [];
+
+    for (const calendarId of calendarIds) {
+      try {
+        const credentials: UserCredentials = {
+          provider: user.provider,
+          calendarId,
+          refreshToken: user.refreshToken,
+          caldavUrl: user.caldavUrl,
+          caldavUsername: user.caldavUsername,
+        };
+
+        const busyWindows = await provider.fetchFreeBusy(credentials, timeMinIso, timeMaxIso, timezone);
+        allBusyWindows.push(...busyWindows);
+      } catch (error) {
+        // Log the error but continue with other calendars
+        console.error(`Failed to fetch freebusy for calendar ${calendarId}:`, error);
+        // Continue to next calendar
+      }
+    }
+
+    const normalizedWindows = normalizeWindows(allBusyWindows);
+
+    await persistFreeBusyWindows(env, user.id, syncId, normalizedWindows, timeMinIso, timeMaxIso, nowIso, user.provider);
     await updateAvailability(env, user.id, normalizedWindows, dateStrings, timezone, nowIso);
 
     const completedIso = new Date().toISOString();
@@ -132,7 +165,8 @@ async function persistFreeBusyWindows(
   windows: BusyWindow[],
   timeMinIso: string,
   timeMaxIso: string,
-  timestampIso: string
+  timestampIso: string,
+  provider: CalendarProviderType
 ): Promise<void> {
   await env.DB.prepare(
     `DELETE FROM freebusy_windows
@@ -147,19 +181,12 @@ async function persistFreeBusyWindows(
     return;
   }
 
+  const sourceLabel = `${provider}-freebusy`;
   const statements = windows.map((window) =>
     env.DB.prepare(
       `INSERT INTO freebusy_windows (id, user_id, start_at, end_at, source, sync_run_id, created_at, updated_at)
        VALUES (NULL, ?, ?, ?, ?, ?, ?, ?)`
-    ).bind(
-      userId,
-      window.start,
-      window.end,
-      SOURCE_LABEL,
-      syncId,
-      timestampIso,
-      timestampIso
-    )
+    ).bind(userId, window.start, window.end, sourceLabel, syncId, timestampIso, timestampIso)
   );
 
   await env.DB.batch(statements);

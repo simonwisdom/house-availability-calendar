@@ -11,7 +11,7 @@
       }
       body {
         margin: 0;
-        padding: 2rem 1rem 4rem;
+        padding: 0.75rem 1rem 4rem;
         min-height: 100vh;
         display: flex;
         justify-content: center;
@@ -20,22 +20,40 @@
       main {
         width: min(920px, 100%);
         display: grid;
-        gap: 1.5rem;
+        gap: 0.75rem;
       }
       header {
         display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        justify-content: space-between;
-        align-items: baseline;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
       }
-      .hint {
-        margin: 0.35rem 0 0;
+      header h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 500;
+      }
+      .account-indicator {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
         font-size: 0.85rem;
-        color: rgba(15, 23, 42, 0.65);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #047857;
+      }
+      .account-indicator a {
+        color: #0f172a;
+        text-decoration: none;
+        margin-left: 0.25rem;
       }
       #last-updated {
-        font-size: 0.9rem;
         color: rgba(0, 0, 0, 0.68);
       }
       #heat-grid {
@@ -138,9 +156,23 @@
         font-weight: 500;
         font-size: 0.95rem;
         transition: background 0.2s ease;
+        border: none;
+        cursor: pointer;
       }
       .connect-btn:hover {
         background: #357ae8;
+      }
+      .connect-btn.apple {
+        background: #000;
+      }
+      .connect-btn.apple:hover {
+        background: #333;
+      }
+      .provider-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: center;
       }
 
       /* Blur and overlay styles */
@@ -173,6 +205,59 @@
       .connect-overlay .connect-btn {
         display: inline-block;
       }
+
+      /* Settings button */
+      .settings-btn {
+        color: #0f172a;
+        text-decoration: none;
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+      }
+      .settings-btn:hover {
+        opacity: 0.7;
+      }
+
+      /* CalDAV form styles */
+      .caldav-form {
+        display: none;
+        text-align: left;
+        margin-top: 1rem;
+      }
+      .caldav-form.active {
+        display: block;
+      }
+      .caldav-form label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      .caldav-form input {
+        width: 100%;
+        padding: 0.6rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+      }
+      .caldav-form .hint {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-top: -0.5rem;
+        margin-bottom: 0.75rem;
+      }
+      .caldav-form button {
+        width: 100%;
+      }
+      .back-link {
+        color: #4285f4;
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: underline;
+        margin-top: 1rem;
+        display: inline-block;
+      }
+
       @media (prefers-color-scheme: dark) {
         .connect-overlay {
           background: #1e293b;
@@ -181,25 +266,39 @@
         .connect-overlay p {
           color: #94a3b8;
         }
+        .caldav-form input {
+          background: #334155;
+          border-color: #475569;
+          color: #f1f5f9;
+        }
+        .account-indicator {
+          background: rgba(30, 41, 59, 0.9);
+          border-color: rgba(255, 255, 255, 0.1);
+          color: #6ee7b7;
+        }
+        .account-indicator a {
+          color: #f1f5f9;
+        }
       }
     </style>
   </head>
   <body>
+    <div class="account-indicator" id="account-indicator" style="display: none;">
+      <span id="account-email"></span>
+      <a href="/settings.html" class="settings-btn">⚙️</a>
+    </div>
+
     <main>
       <header>
-        <div>
-          <h1>Evening Heat Map</h1>
-          <p id="timezone"></p>
-          <p class="hint">Counts how many housemates are free between 18:00 and 22:00.</p>
-        </div>
-        <div>
-          <div id="last-updated">Loading…</div>
-          <a href="https://house-availability.simonwisdom.workers.dev/auth/google/start"
-             class="connect-btn"
-             id="connect-button"
-             style="display: none;">Connect Google Calendar</a>
-        </div>
+        <h1>🌆 Evening (18:00-22:00) • 🌍 <span id="timezone">Europe/London</span></h1>
+        <span>•</span>
+        <span id="last-updated">Loading…</span>
+        <a href="https://house-availability.simonwisdom.workers.dev/auth/google/start"
+           class="connect-btn"
+           id="connect-button"
+           style="display: none;">Connect Google Calendar</a>
       </header>
+
       <section id="heat-grid"></section>
       <section id="legend"></section>
     </main>
@@ -207,10 +306,40 @@
     <!-- Connect overlay shown when no data -->
     <div id="connect-overlay" class="connect-overlay" style="display: none;">
       <h2>Welcome to House Availability</h2>
-      <p>Connect your Google Calendar to see when housemates are free for events.</p>
-      <a class="connect-btn"
-         id="overlay-connect"
-         href="https://house-availability.simonwisdom.workers.dev/auth/google/start">Connect Google Calendar</a>
+      <p>Connect your calendar to see when housemates are free for events.</p>
+
+      <div id="provider-selection" class="provider-buttons">
+        <a class="connect-btn"
+           id="overlay-connect-google"
+           href="https://house-availability.simonwisdom.workers.dev/auth/google/start">Connect Google Calendar</a>
+        <button class="connect-btn apple" id="overlay-connect-apple">Connect Apple Calendar</button>
+      </div>
+
+      <form id="caldav-form" class="caldav-form">
+        <h3 style="margin-top: 0;">Apple Calendar Setup</h3>
+        <p style="font-size: 0.9rem;">You'll need an app-specific password from your iCloud settings.</p>
+        <a href="https://support.apple.com/en-us/102654" target="_blank" style="font-size: 0.85rem; color: #4285f4;">How to generate an app-specific password →</a>
+
+        <label style="margin-top: 1rem;">
+          Your Name
+          <input type="text" id="caldav-name" placeholder="John Doe" required />
+        </label>
+
+        <label>
+          Apple ID Email
+          <input type="email" id="caldav-email" placeholder="your.email@gmail.com or you@icloud.com" required />
+          <div class="hint">Use whatever email address is your Apple ID</div>
+        </label>
+
+        <label>
+          App-Specific Password
+          <input type="password" id="caldav-password" placeholder="xxxx-xxxx-xxxx-xxxx" required />
+          <div class="hint">Generate this from appleid.apple.com → Sign-In & Security → App-Specific Passwords</div>
+        </label>
+
+        <button type="submit" class="connect-btn apple">Connect Calendar</button>
+        <a class="back-link" id="back-to-providers">← Back to provider selection</a>
+      </form>
     </div>
     <script>
       const workerOrigin = (() => {
@@ -236,13 +365,63 @@
       const lastUpdatedEl = document.getElementById("last-updated");
       const legend = document.getElementById("legend");
       const connectButton = document.getElementById("connect-button");
-      const overlayConnect = document.getElementById("overlay-connect");
+      const overlayConnectGoogle = document.getElementById("overlay-connect-google");
+      const overlayConnectApple = document.getElementById("overlay-connect-apple");
+      const providerSelection = document.getElementById("provider-selection");
+      const caldavForm = document.getElementById("caldav-form");
+      const backToProviders = document.getElementById("back-to-providers");
 
       if (connectButton) {
         connectButton.href = `${workerOrigin}/auth/google/start`;
       }
-      if (overlayConnect) {
-        overlayConnect.href = `${workerOrigin}/auth/google/start`;
+      if (overlayConnectGoogle) {
+        overlayConnectGoogle.href = `${workerOrigin}/auth/google/start`;
+      }
+
+      // Handle Apple Calendar button click
+      if (overlayConnectApple) {
+        overlayConnectApple.addEventListener("click", () => {
+          providerSelection.style.display = "none";
+          caldavForm.classList.add("active");
+        });
+      }
+
+      // Handle back to provider selection
+      if (backToProviders) {
+        backToProviders.addEventListener("click", (e) => {
+          e.preventDefault();
+          caldavForm.classList.remove("active");
+          providerSelection.style.display = "flex";
+        });
+      }
+
+      // Handle CalDAV form submission
+      if (caldavForm) {
+        caldavForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const displayName = document.getElementById("caldav-name").value.trim();
+          const email = document.getElementById("caldav-email").value.trim();
+          const password = document.getElementById("caldav-password").value.trim();
+
+          try {
+            const response = await fetch(`${workerOrigin}/auth/caldav/setup`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ displayName, email, password })
+            });
+
+            const result = await response.json();
+            if (result.ok && result.redirectUrl) {
+              window.location.href = result.redirectUrl;
+            } else {
+              alert(`Setup failed: ${result.error || "Unknown error"}`);
+            }
+          } catch (error) {
+            console.error("CalDAV setup error:", error);
+            alert("Failed to connect. Please check your credentials and try again.");
+          }
+        });
       }
 
       function formatDate(dateStr) {
@@ -262,14 +441,14 @@
       }
 
       function formatRelative(datetime, timezone) {
-        if (!datetime) return "Not yet synced";
+        if (!datetime) return "Not synced";
         const date = new Date(datetime);
         const formatted = new Intl.DateTimeFormat(undefined, {
           dateStyle: "medium",
           timeStyle: "short",
           timeZone: timezone
         }).format(date);
-        return `Last updated ${formatted}`;
+        return `Updated ${formatted}`;
       }
 
       function getTodayIso(timezone) {
@@ -322,7 +501,7 @@
 
       function renderHeatMap(data) {
         const timezone = data.timezone || "Europe/London";
-        tzEl.textContent = `Timezone: ${timezone}`;
+        if (tzEl) tzEl.textContent = timezone;
         lastUpdatedEl.textContent = formatRelative(data.lastUpdatedIso, timezone);
 
         const weeks = buildWeeks(data.days);
@@ -414,10 +593,62 @@
           // We have real data, show it
           hideConnectState();
           renderHeatMap(data);
+
+          // Load user info to populate localStorage and show settings button
+          await loadUserInfo();
+          loadUserCalendars();
         } catch (error) {
           lastUpdatedEl.textContent = "Unable to load availability.";
           console.error(error);
           showConnectState();
+        }
+      }
+
+      async function loadUserInfo() {
+        try {
+          const response = await fetch(`${workerOrigin}/api/user/info`, {
+            credentials: "include"
+          });
+
+          if (!response.ok) return;
+
+          const data = await response.json();
+          if (data.ok && data.email) {
+            localStorage.setItem('user_email', data.email);
+          }
+        } catch (error) {
+          console.error('Failed to load user info:', error);
+        }
+      }
+
+      async function loadUserCalendars() {
+        const userEmail = localStorage.getItem('user_email');
+        if (!userEmail) return;
+
+        // Show account indicator
+        const accountIndicator = document.getElementById('account-indicator');
+        const accountEmailEl = document.getElementById('account-email');
+        if (accountIndicator && accountEmailEl) {
+          accountEmailEl.textContent = `✓ ${userEmail}`;
+          accountIndicator.style.display = 'flex';
+        }
+
+        try {
+          const response = await fetch(`${workerOrigin}/api/user/calendars?email=${encodeURIComponent(userEmail)}`, {
+            credentials: "include"
+          });
+
+          if (!response.ok) return;
+
+          const data = await response.json();
+          if (data.ok && data.calendars && data.calendars.length > 0) {
+            // Update account indicator with calendar count
+            if (accountEmailEl) {
+              accountEmailEl.textContent = `✓ ${userEmail} (${data.calendars.length} calendar${data.calendars.length !== 1 ? 's' : ''})`;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load user calendars:', error);
         }
       }
 

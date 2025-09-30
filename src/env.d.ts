@@ -5,5 +5,4 @@ export interface Env {
   GOOGLE_REDIRECT_URI: string;
   APP_BASE_URL: string;
   HOUSE_TIMEZONE: string;
-  HOUSEHOLD_SECRET: string;
 }

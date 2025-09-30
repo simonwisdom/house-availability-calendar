@@ -1,5 +1,6 @@
 import type { Env } from "./env";
-import { exchangeCodeForTokens, fetchPrimaryCalendar } from "./google";
+import { exchangeCodeForTokens, fetchPrimaryCalendar } from "./providers/google";
+import { detectCalDAVServer } from "./providers/caldav";
 import { performFreeBusySync, buildSyncWindow, DEFAULT_TIMEZONE, HORIZON_DAYS } from "./freebusy";
 
 type AvailabilityCell = {
@@ -14,42 +15,32 @@ type AvailabilityResponse = {
   lastUpdatedIso?: string;
 };
 
-const SESSION_COOKIE_NAME = "household_session";
-const SESSION_VERSION = "v1";
+const SESSION_COOKIE_NAME = "user_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const SESSION_TTL_SECONDS = Math.floor(SESSION_TTL_MS / 1000);
 
 type AuthMode = "public" | "page" | "api";
 
 type SessionCheck =
-  | { authorized: true }
+  | { authorized: true; userId: string }
   | { authorized: false; response: Response };
-
-const hmacKeyCache = new Map<string, Promise<CryptoKey>>();
 
 function authModeForRoute(method: string, pathname: string): AuthMode {
   if (method === "OPTIONS") return "public";
   if (pathname === "/health") return "public";
   if (pathname === "/auth/google/start") return "public";
   if (pathname === "/auth/google/callback") return "public";
-  if (pathname === "/household/login") return "public";
-  if (pathname === "/api/availability") return "public";
-  if (pathname === "/household/logout") return "page";
+  if (pathname === "/auth/caldav/setup") return "public";
+  if (pathname === "/api/calendars/list") return "public";
+  if (pathname === "/api/calendars/select") return "public";
+  if (pathname === "/api/user/calendars") return "public";
+  if (pathname === "/api/user/info") return "api";
+  if (pathname === "/household/logout") return "public";
   if (pathname.startsWith("/api/")) return "api";
   if (pathname.startsWith("/auth/")) return "page";
   return "page";
 }
 
 async function ensureSession(request: Request, env: Env, mode: AuthMode): Promise<SessionCheck> {
-  const secret = env.HOUSEHOLD_SECRET;
-  if (!secret) {
-    console.error("HOUSEHOLD_SECRET is not configured");
-    return {
-      authorized: false,
-      response: new Response("household_secret_not_configured", { status: 500 }),
-    };
-  }
-
   const cookieHeader = request.headers.get("Cookie");
   const cookieValue = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
   const isSecure = new URL(request.url).protocol === "https:";
@@ -58,160 +49,15 @@ async function ensureSession(request: Request, env: Env, mode: AuthMode): Promis
     return { authorized: false, response: buildUnauthorizedResponse(request, mode, isSecure) };
   }
 
-  const verification = await verifySessionToken(cookieValue, secret);
-  if (!verification.valid) {
-    if (verification.reason === "expired") {
-      console.info("Session expired, forcing re-auth");
-    }
+  const userId = await decryptUserId(cookieValue, env);
+  if (!userId) {
+    console.info("Invalid or expired session cookie");
     return { authorized: false, response: buildUnauthorizedResponse(request, mode, isSecure) };
   }
 
-  return { authorized: true };
+  return { authorized: true, userId };
 }
 
-function renderHouseholdLoginPage(
-  request: Request,
-  options: { error?: string; next?: string } = {}
-): Response {
-  const url = new URL(request.url);
-  const next = options.next ?? sanitizeNextParam(url.searchParams.get("next"));
-  const error = options.error;
-
-  const html = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Household Access</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem 1rem;
-      }
-      main {
-        width: min(380px, 100%);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-        border-radius: 12px;
-        padding: 1.5rem;
-        background: rgba(255, 255, 255, 0.82);
-        backdrop-filter: blur(6px);
-        box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
-      }
-      h1 {
-        margin-top: 0;
-        margin-bottom: 1rem;
-        font-size: 1.45rem;
-      }
-      form {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-      label {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-        font-size: 0.95rem;
-      }
-      input[type="password"] {
-        padding: 0.75rem 0.9rem;
-        border-radius: 8px;
-        border: 1px solid rgba(148, 163, 184, 0.8);
-        font-size: 1rem;
-      }
-      button {
-        padding: 0.75rem 1.1rem;
-        border: none;
-        border-radius: 8px;
-        font-size: 1rem;
-        background: #0f172a;
-        color: white;
-        cursor: pointer;
-      }
-      button:hover {
-        filter: brightness(1.05);
-      }
-      .error {
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        background: rgba(220, 38, 38, 0.12);
-        color: #7f1d1d;
-        font-size: 0.92rem;
-      }
-      p.hint {
-        margin-top: 0.25rem;
-        font-size: 0.85rem;
-        color: rgba(15, 23, 42, 0.7);
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Household access</h1>
-      <p class="hint">Enter the shared passphrase once to unlock the dashboard and Google connect flow.</p>
-      ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
-      <form method="post" action="/household/login">
-        <label>
-          Passphrase
-          <input type="password" name="passphrase" autocomplete="current-password" required autofocus />
-        </label>
-        ${next ? `<input type="hidden" name="next" value="${escapeAttribute(next)}" />` : ""}
-        <button type="submit">Unlock</button>
-      </form>
-    </main>
-  </body>
-</html>`;
-
-  const headers = new Headers({
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store",
-  });
-
-  const status = error ? 401 : 200;
-  return new Response(html, { status, headers });
-}
-
-async function handleHouseholdLogin(request: Request, env: Env): Promise<Response> {
-  const secret = env.HOUSEHOLD_SECRET;
-  if (!secret) {
-    console.error("HOUSEHOLD_SECRET is not configured");
-    return new Response("household_secret_not_configured", { status: 500 });
-  }
-
-  const formData = await request.formData().catch(() => undefined);
-  if (!formData) {
-    return renderHouseholdLoginPage(request, { error: "Invalid form submission" });
-  }
-
-  const passphrase = String(formData.get("passphrase") ?? "").trim();
-  const next = sanitizeNextParam(formData.get("next"));
-
-  if (!passphrase) {
-    return renderHouseholdLoginPage(request, { error: "Enter the household passphrase.", next });
-  }
-
-  if (passphrase !== secret) {
-    return renderHouseholdLoginPage(request, { error: "Incorrect passphrase. Try again.", next });
-  }
-
-  const isSecure = new URL(request.url).protocol === "https:";
-  const setCookieHeader = await createSessionCookie(secret, isSecure);
-  const target = resolveRedirectTarget(request, env, next);
-
-  const headers = new Headers();
-  headers.set("Location", target);
-  headers.append("Set-Cookie", setCookieHeader);
-
-  return new Response(null, { status: 303, headers });
-}
 
 function handleHouseholdLogout(request: Request, env: Env): Response {
   const isSecure = new URL(request.url).protocol === "https:";
@@ -226,95 +72,77 @@ function handleHouseholdLogout(request: Request, env: Env): Response {
   return new Response(null, { status: 303, headers });
 }
 
-async function createSessionCookie(secret: string, isSecure: boolean): Promise<string> {
-  const token = await createSessionToken(secret);
+async function createUserSessionCookie(userId: string, env: Env, isSecure: boolean): Promise<string> {
+  const token = await encryptUserId(userId, env);
   return buildSessionCookie(token, isSecure);
 }
 
-async function createSessionToken(secret: string): Promise<string> {
-  const timestamp = Date.now().toString();
-  const nonceBytes = new Uint8Array(12);
-  crypto.getRandomValues(nonceBytes);
-  const nonce = toBase64Url(nonceBytes.buffer);
-  const payload = `${SESSION_VERSION}.${timestamp}.${nonce}`;
-  const signature = await signPayload(secret, payload);
-  return `${payload}.${signature}`;
+async function encryptUserId(userId: string, env: Env): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(JSON.stringify({ userId, exp: Date.now() + SESSION_TTL_MS }));
+
+  // Use a simple encryption key derived from APP_BASE_URL (or a default)
+  const keyMaterial = env.APP_BASE_URL || "default-session-key";
+  const keyData = encoder.encode(keyMaterial);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    await crypto.subtle.digest("SHA-256", keyData),
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    data
+  );
+
+  // Combine IV + encrypted data
+  const combined = new Uint8Array(iv.length + encrypted.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encrypted), iv.length);
+
+  return toBase64Url(combined.buffer);
 }
 
-async function verifySessionToken(
-  token: string,
-  secret: string
-): Promise<{ valid: true } | { valid: false; reason: string }> {
-  const parts = token.split(".");
-  if (parts.length !== 4) {
-    return { valid: false, reason: "format" };
-  }
-
-  const [version, timestampStr, nonce, signature] = parts;
-  if (version !== SESSION_VERSION) {
-    return { valid: false, reason: "version" };
-  }
-
-  const timestamp = Number(timestampStr);
-  if (!Number.isFinite(timestamp)) {
-    return { valid: false, reason: "timestamp" };
-  }
-
-  if (!nonce) {
-    return { valid: false, reason: "nonce" };
-  }
-
-  if (!signature) {
-    return { valid: false, reason: "signature" };
-  }
-
-  if (Date.now() - timestamp > SESSION_TTL_MS) {
-    return { valid: false, reason: "expired" };
-  }
-
-  const payload = `${version}.${timestampStr}.${nonce}`;
-  const ok = await verifyPayload(secret, payload, signature);
-  if (!ok) {
-    return { valid: false, reason: "signature" };
-  }
-
-  return { valid: true };
-}
-
-async function signPayload(secret: string, payload: string): Promise<string> {
-  const key = await getHmacKey(secret);
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
-  return toBase64Url(signature);
-}
-
-async function verifyPayload(secret: string, payload: string, signature: string): Promise<boolean> {
+async function decryptUserId(token: string, env: Env): Promise<string | null> {
   try {
-    const key = await getHmacKey(secret);
-    return await crypto.subtle.verify(
-      "HMAC",
-      key,
-      fromBase64Url(signature),
-      new TextEncoder().encode(payload)
-    );
-  } catch (error) {
-    console.warn("Failed to verify session payload", error);
-    return false;
-  }
-}
+    const encoder = new TextEncoder();
+    const combined = new Uint8Array(fromBase64Url(token));
 
-function getHmacKey(secret: string): Promise<CryptoKey> {
-  let cached = hmacKeyCache.get(secret);
-  if (!cached) {
-    cached = crypto.subtle.importKey(
+    const iv = combined.slice(0, 12);
+    const encrypted = combined.slice(12);
+
+    const keyMaterial = env.APP_BASE_URL || "default-session-key";
+    const keyData = encoder.encode(keyMaterial);
+    const key = await crypto.subtle.importKey(
       "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
+      await crypto.subtle.digest("SHA-256", keyData),
+      { name: "AES-GCM", length: 256 },
       false,
-      ["sign", "verify"]
+      ["decrypt"]
     );
-    hmacKeyCache.set(secret, cached);
+
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      encrypted
+    );
+
+    const decoded = JSON.parse(new TextDecoder().decode(decrypted));
+
+    // Check expiration
+    if (decoded.exp && Date.now() > decoded.exp) {
+      return null;
+    }
+
+    return decoded.userId || null;
+  } catch (error) {
+    console.warn("Failed to decrypt session token", error);
+    return null;
   }
-  return cached;
 }
 
 function buildUnauthorizedResponse(request: Request, mode: AuthMode, isSecure: boolean): Response {
@@ -324,15 +152,9 @@ function buildUnauthorizedResponse(request: Request, mode: AuthMode, isSecure: b
     return response;
   }
 
-  const requestUrl = new URL(request.url);
-  const next = sanitizeNextParam(`${requestUrl.pathname}${requestUrl.search}`);
-  const loginUrl = new URL("/household/login", request.url);
-  if (next) {
-    loginUrl.searchParams.set("next", next);
-  }
-
+  // Redirect to homepage where users can choose their OAuth provider
   const headers = new Headers();
-  headers.set("Location", loginUrl.toString());
+  headers.set("Location", "/");
   headers.append("Set-Cookie", buildExpiredSessionCookie(isSecure));
 
   return new Response(null, { status: 303, headers });
@@ -340,12 +162,13 @@ function buildUnauthorizedResponse(request: Request, mode: AuthMode, isSecure: b
 
 function buildSessionCookie(token: string, isSecure: boolean): string {
   const expires = new Date(Date.now() + SESSION_TTL_MS).toUTCString();
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
   const parts = [
     `${SESSION_COOKIE_NAME}=${token}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    `Max-Age=${SESSION_TTL_SECONDS}`,
+    `Max-Age=${maxAge}`,
     `Expires=${expires}`,
   ];
   if (isSecure) {
@@ -424,25 +247,12 @@ function fromBase64Url(value: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeAttribute(value: string): string {
-  return escapeHtml(value).replace(/`/g, "&#96;");
-}
-
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const method = request.method.toUpperCase();
 
-    if (method === "OPTIONS" && url.pathname.startsWith("/api/")) {
+    if (method === "OPTIONS" && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/"))) {
       return handleCorsPreflight(request);
     }
 
@@ -458,13 +268,6 @@ export default {
       }
     }
 
-    if (method === "GET" && url.pathname === "/household/login") {
-      return renderHouseholdLoginPage(request);
-    }
-
-    if (method === "POST" && url.pathname === "/household/login") {
-      return handleHouseholdLogin(request, env);
-    }
 
     if (method === "POST" && url.pathname === "/household/logout") {
       return handleHouseholdLogout(request, env);
@@ -484,6 +287,26 @@ export default {
 
     if (url.pathname === "/auth/google/callback") {
       return handleGoogleCallback(request, env, ctx);
+    }
+
+    if (method === "POST" && url.pathname === "/auth/caldav/setup") {
+      return handleCalDAVSetup(request, env, ctx);
+    }
+
+    if (method === "GET" && url.pathname === "/api/calendars/list") {
+      return handleListCalendars(request, env);
+    }
+
+    if ((method === "POST" || method === "GET") && url.pathname === "/api/calendars/select") {
+      return handleSelectCalendars(request, env);
+    }
+
+    if (method === "GET" && url.pathname === "/api/user/calendars") {
+      return handleGetUserCalendars(request, env);
+    }
+
+    if (method === "GET" && url.pathname === "/api/user/info") {
+      return handleGetUserInfo(request, env);
     }
 
     return new Response("Not found", { status: 404 });
@@ -584,11 +407,19 @@ async function handleManualSync(request: Request, env: Env, ctx: ExecutionContex
     }
 
     const user = await env.DB.prepare(
-      `SELECT id, google_calendar_id as calendarId, refresh_token_encrypted as refreshToken
+      `SELECT id, provider, calendar_id as calendarId, refresh_token_encrypted as refreshToken,
+              caldav_url as caldavUrl, caldav_username as caldavUsername
          FROM users WHERE id = ?`
     )
       .bind(userId)
-      .first<{ id: string; calendarId: string; refreshToken: string }>();
+      .first<{
+        id: string;
+        provider: "google" | "caldav";
+        calendarId: string;
+        refreshToken: string;
+        caldavUrl?: string;
+        caldavUsername?: string;
+      }>();
 
     if (!user) {
       return jsonWithCors({ ok: false, error: "not_found" }, request, 404);
@@ -609,7 +440,6 @@ async function handleManualSync(request: Request, env: Env, ctx: ExecutionContex
 }
 
 async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-  // TODO: exchange auth code for tokens, persist refresh token, and trigger initial sync.
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   if (!code) {
@@ -618,41 +448,116 @@ async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionCo
 
   try {
     const tokens = await exchangeCodeForTokens(env, code);
-    const primaryCalendar = await fetchPrimaryCalendar(tokens.access_token);
     const idTokenClaims = decodeIdToken(tokens.id_token);
 
-    const email = determineUserEmail(idTokenClaims.email, primaryCalendar.id);
-    const displayName = idTokenClaims.name || primaryCalendar.summary || email;
+    // Determine email from ID token or fall back to primary calendar
+    let email = idTokenClaims.email;
+    const primaryCalendar = await fetchPrimaryCalendar(tokens.access_token);
+    if (!email) {
+      email = determineUserEmail(undefined, primaryCalendar.id);
+    }
+
+    const displayName = idTokenClaims.name || email;
     const nowIso = new Date().toISOString();
 
-    const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first<{ id: string }>();
+    // Use primary calendar directly - skip calendar picker
+    const primaryCalendarId = primaryCalendar.id;
+
+    // Create or update user directly
+    const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: string }>();
+
     const userId = existing?.id ?? crypto.randomUUID();
 
     if (existing) {
       await env.DB.prepare(
         `UPDATE users
          SET display_name = ?,
-             google_calendar_id = ?,
+             provider = 'google',
+             calendar_id = ?,
              refresh_token_encrypted = ?,
              last_auth_at = ?,
              updated_at = ?
          WHERE id = ?`
       )
-        .bind(displayName, primaryCalendar.id, tokens.refresh_token, nowIso, nowIso, userId)
+        .bind(
+          displayName,
+          primaryCalendarId,
+          tokens.refresh_token,
+          nowIso,
+          nowIso,
+          userId
+        )
         .run();
+
+      // Delete existing calendar selections
+      await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO users (id, email, display_name, google_calendar_id, refresh_token_encrypted, last_auth_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (id, email, display_name, provider, calendar_id, refresh_token_encrypted, last_auth_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'google', ?, ?, ?, ?, ?)`
       )
-        .bind(userId, email, displayName, primaryCalendar.id, tokens.refresh_token, nowIso, nowIso, nowIso)
+        .bind(
+          userId,
+          email,
+          displayName,
+          primaryCalendarId,
+          tokens.refresh_token,
+          nowIso,
+          nowIso,
+          nowIso
+        )
         .run();
     }
 
+    // Store the primary calendar in user_calendars
+    await env.DB.prepare(
+      `INSERT INTO user_calendars (id, user_id, calendar_id, calendar_name, is_primary, created_at)
+       VALUES (?, ?, ?, ?, 1, ?)`
+    )
+      .bind(
+        crypto.randomUUID(),
+        userId,
+        primaryCalendarId,
+        primaryCalendar.summary,
+        nowIso
+      )
+      .run();
+
+    // Queue initial sync
     ctx.waitUntil(queueInitialSync(env, userId));
 
+    // Create user session cookie
+    const isSecure = new URL(request.url).protocol === "https:";
+    const sessionCookie = await createUserSessionCookie(userId, env, isSecure);
+
     const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "success");
-    return Response.redirect(redirectUrl, 303);
+
+    // Redirect to dashboard
+    const headers = new Headers();
+    headers.set("Location", redirectUrl);
+    headers.append("Set-Cookie", sessionCookie);
+
+    return new Response(null, { status: 303, headers });
+
+    /* FUTURE: Calendar picker flow (commented out for now)
+    // Create pending auth record
+    const pendingAuthId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO pending_auth (id, email, display_name, provider, refresh_token_encrypted, created_at)
+       VALUES (?, ?, ?, 'google', ?, ?)`
+    )
+      .bind(pendingAuthId, email, displayName, tokens.refresh_token, nowIso)
+      .run();
+
+    // Redirect to calendar selection page
+    const baseUrl = env.APP_BASE_URL || new URL("/", request.url).toString();
+    const redirectUrl = new URL("/select-calendars.html", baseUrl);
+    redirectUrl.searchParams.set("pending_auth_id", pendingAuthId);
+
+    return Response.redirect(redirectUrl.toString(), 303);
+    */
   } catch (error) {
     console.error("OAuth callback failed", error);
     const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "error");
@@ -663,8 +568,17 @@ async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionCo
 async function runNightlySync(env: Env): Promise<void> {
   const timezone = env.HOUSE_TIMEZONE || DEFAULT_TIMEZONE;
   const { results } = await env.DB.prepare(
-    `SELECT id, google_calendar_id as calendarId, refresh_token_encrypted as refreshToken FROM users`
-  ).all<{ id: string; calendarId: string; refreshToken: string }>();
+    `SELECT id, provider, calendar_id as calendarId, refresh_token_encrypted as refreshToken,
+            caldav_url as caldavUrl, caldav_username as caldavUsername
+       FROM users`
+  ).all<{
+    id: string;
+    provider: "google" | "caldav";
+    calendarId: string;
+    refreshToken: string;
+    caldavUrl?: string;
+    caldavUsername?: string;
+  }>();
 
   if (!results || results.length === 0) {
     console.log("Nightly sync: no users to process");
@@ -709,14 +623,56 @@ function buildRedirectUrl(baseUrl: string, _status: "success" | "error"): string
   return new URL(target).toString();
 }
 
+async function handleCalDAVSetup(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  try {
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const password = typeof body.password === "string" ? body.password.trim() : "";
+    const displayName = typeof body.displayName === "string" ? body.displayName.trim() : email;
+
+    if (!email || !password) {
+      return jsonWithCors({ ok: false, error: "Email and password are required" }, request, 400);
+    }
+
+    const caldavUrl = detectCalDAVServer(email, "apple");
+    const nowIso = new Date().toISOString();
+
+    // Create pending auth record
+    const pendingAuthId = crypto.randomUUID();
+    await env.DB.prepare(
+      `INSERT INTO pending_auth (id, email, display_name, provider, refresh_token_encrypted, caldav_url, caldav_username, created_at)
+       VALUES (?, ?, ?, 'caldav', ?, ?, ?, ?)`
+    )
+      .bind(pendingAuthId, email, displayName, password, caldavUrl, email, nowIso)
+      .run();
+
+    // Return the pending_auth_id for the frontend to redirect
+    const baseUrl = request.headers.get("Origin") || env.APP_BASE_URL || new URL("/", request.url).toString();
+    const redirectUrl = new URL("/select-calendars.html", baseUrl);
+    redirectUrl.searchParams.set("pending_auth_id", pendingAuthId);
+
+    return jsonWithCors({ ok: true, redirectUrl: redirectUrl.toString() }, request);
+  } catch (error) {
+    console.error("CalDAV setup failed", error);
+    return jsonWithCors({ ok: false, error: "setup_failed" }, request, 500);
+  }
+}
+
 async function queueInitialSync(env: Env, userId: string): Promise<void> {
-  // TODO: Replace direct call with durable background job if needed.
   const user = await env.DB.prepare(
-    `SELECT id, google_calendar_id as calendarId, refresh_token_encrypted as refreshToken
+    `SELECT id, provider, calendar_id as calendarId, refresh_token_encrypted as refreshToken,
+            caldav_url as caldavUrl, caldav_username as caldavUsername
      FROM users WHERE id = ?`
   )
     .bind(userId)
-    .first<{ id: string; calendarId: string; refreshToken: string }>();
+    .first<{
+      id: string;
+      provider: "google" | "caldav";
+      calendarId: string;
+      refreshToken: string;
+      caldavUrl?: string;
+      caldavUsername?: string;
+    }>();
 
   if (!user) {
     console.warn("queueInitialSync: user not found", { userId });
@@ -774,4 +730,276 @@ function handleCorsPreflight(request: Request): Response {
   headers.set("Access-Control-Max-Age", "86400");
   headers.set("Access-Control-Allow-Credentials", "true");
   return new Response(null, { status: 204, headers });
+}
+
+async function handleListCalendars(request: Request, env: Env): Promise<Response> {
+  try {
+    // Get pending_auth_id from query params (passed from callback redirect)
+    const url = new URL(request.url);
+    const pendingAuthId = url.searchParams.get("pending_auth_id");
+
+    if (!pendingAuthId) {
+      return jsonWithCors({ ok: false, error: "Missing pending_auth_id" }, request, 400);
+    }
+
+    // Fetch pending auth record
+    const pendingAuth = await env.DB.prepare(
+      `SELECT provider, refresh_token_encrypted as refreshToken, caldav_url as caldavUrl,
+              caldav_username as caldavUsername
+       FROM pending_auth WHERE id = ?`
+    )
+      .bind(pendingAuthId)
+      .first<{
+        provider: "google" | "caldav";
+        refreshToken: string;
+        caldavUrl?: string;
+        caldavUsername?: string;
+      }>();
+
+    if (!pendingAuth) {
+      return jsonWithCors({ ok: false, error: "Pending auth not found or expired" }, request, 404);
+    }
+
+    // Create provider and list calendars
+    const { createProvider } = await import("./providers/base");
+    const provider = createProvider(env, pendingAuth.provider);
+
+    const credentials = {
+      provider: pendingAuth.provider,
+      refreshToken: pendingAuth.refreshToken,
+      caldavUrl: pendingAuth.caldavUrl,
+      caldavUsername: pendingAuth.caldavUsername,
+      calendarId: "temp", // Not used for listing
+    };
+
+    const calendars = await provider.listCalendars(credentials);
+
+    return jsonWithCors({ ok: true, calendars }, request);
+  } catch (error) {
+    console.error("List calendars error:", error);
+    return jsonWithCors({ ok: false, error: "Failed to list calendars" }, request, 500);
+  }
+}
+
+async function handleGetUserInfo(request: Request, env: Env): Promise<Response> {
+  try {
+    // This route requires authentication - userId comes from ensureSession
+    const session = await ensureSession(request, env, "api");
+    if (!session.authorized) {
+      return session.response;
+    }
+
+    // Fetch user info from database
+    const user = await env.DB.prepare("SELECT email, display_name FROM users WHERE id = ?")
+      .bind(session.userId)
+      .first<{ email: string; display_name: string }>();
+
+    if (!user) {
+      return jsonWithCors({ ok: false, error: "User not found" }, request, 404);
+    }
+
+    return jsonWithCors({ ok: true, email: user.email, displayName: user.display_name }, request);
+  } catch (error) {
+    console.error("Get user info error:", error);
+    return jsonWithCors({ ok: false, error: "Failed to get user info" }, request, 500);
+  }
+}
+
+async function handleGetUserCalendars(request: Request, env: Env): Promise<Response> {
+  try {
+    // Get user email from query parameter (simple approach for now)
+    const url = new URL(request.url);
+    const userEmail = url.searchParams.get("email");
+
+    if (!userEmail) {
+      return jsonWithCors({ ok: false, calendars: [] }, request);
+    }
+
+    // Fetch user and their calendars
+    const user = await env.DB.prepare("SELECT id, email FROM users WHERE email = ?")
+      .bind(userEmail)
+      .first<{ id: string; email: string }>();
+
+    if (!user) {
+      return jsonWithCors({ ok: false, calendars: [] }, request);
+    }
+
+    const { results } = await env.DB.prepare(
+      `SELECT calendar_id as calendarId, calendar_name as calendarName
+       FROM user_calendars WHERE user_id = ? ORDER BY is_primary DESC, calendar_name ASC`
+    )
+      .bind(user.id)
+      .all<{ calendarId: string; calendarName: string | null }>();
+
+    const calendars = results?.map((c) => c.calendarName || c.calendarId) || [];
+
+    return jsonWithCors({ ok: true, calendars }, request);
+  } catch (error) {
+    console.error("Get user calendars error:", error);
+    return jsonWithCors({ ok: false, calendars: [] }, request);
+  }
+}
+
+async function handleSelectCalendars(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    let body: Record<string, unknown>;
+
+    // Handle GET with query params (for same-origin navigation)
+    if (request.method === "GET") {
+      body = {
+        pendingAuthId: url.searchParams.get("pendingAuthId"),
+        calendarIds: JSON.parse(url.searchParams.get("calendarIds") || "[]"),
+        calendarNames: JSON.parse(url.searchParams.get("calendarNames") || "{}"),
+      };
+    } else {
+      // Handle POST with JSON or form data
+      const contentType = request.headers.get("Content-Type") || "";
+      if (contentType.includes("application/x-www-form-urlencoded")) {
+        const formData = await request.formData();
+        body = {
+          pendingAuthId: formData.get("pendingAuthId"),
+          calendarIds: JSON.parse((formData.get("calendarIds") as string) || "[]"),
+          calendarNames: JSON.parse((formData.get("calendarNames") as string) || "{}"),
+        };
+      } else {
+        body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      }
+    }
+
+    const pendingAuthId = typeof body.pendingAuthId === "string" ? body.pendingAuthId.trim() : "";
+    const selectedCalendarIds = Array.isArray(body.calendarIds) ? body.calendarIds : [];
+
+    if (!pendingAuthId) {
+      return jsonWithCors({ ok: false, error: "Missing pendingAuthId" }, request, 400);
+    }
+
+    if (selectedCalendarIds.length === 0) {
+      return jsonWithCors({ ok: false, error: "At least one calendar must be selected" }, request, 400);
+    }
+
+    // Fetch pending auth record
+    const pendingAuth = await env.DB.prepare(
+      `SELECT email, display_name as displayName, provider, refresh_token_encrypted as refreshToken,
+              caldav_url as caldavUrl, caldav_username as caldavUsername
+       FROM pending_auth WHERE id = ?`
+    )
+      .bind(pendingAuthId)
+      .first<{
+        email: string;
+        displayName: string;
+        provider: "google" | "caldav";
+        refreshToken: string;
+        caldavUrl?: string;
+        caldavUsername?: string;
+      }>();
+
+    if (!pendingAuth) {
+      return jsonWithCors({ ok: false, error: "Pending auth not found or expired" }, request, 404);
+    }
+
+    // Create or update user
+    const nowIso = new Date().toISOString();
+    const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?")
+      .bind(pendingAuth.email)
+      .first<{ id: string }>();
+
+    const userId = existing?.id ?? crypto.randomUUID();
+
+    // Use first selected calendar as primary
+    const primaryCalendarId = selectedCalendarIds[0];
+
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE users
+         SET display_name = ?,
+             provider = ?,
+             calendar_id = ?,
+             caldav_url = ?,
+             caldav_username = ?,
+             refresh_token_encrypted = ?,
+             last_auth_at = ?,
+             updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(
+          pendingAuth.displayName,
+          pendingAuth.provider,
+          primaryCalendarId,
+          pendingAuth.caldavUrl,
+          pendingAuth.caldavUsername,
+          pendingAuth.refreshToken,
+          nowIso,
+          nowIso,
+          userId
+        )
+        .run();
+
+      // Delete existing calendar selections
+      await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, display_name, provider, calendar_id, caldav_url, caldav_username, refresh_token_encrypted, last_auth_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          userId,
+          pendingAuth.email,
+          pendingAuth.displayName,
+          pendingAuth.provider,
+          primaryCalendarId,
+          pendingAuth.caldavUrl,
+          pendingAuth.caldavUsername,
+          pendingAuth.refreshToken,
+          nowIso,
+          nowIso,
+          nowIso
+        )
+        .run();
+    }
+
+    // Insert selected calendars into user_calendars
+    for (let i = 0; i < selectedCalendarIds.length; i++) {
+      const calendarId = selectedCalendarIds[i];
+      const calendarName = typeof body.calendarNames === "object" && body.calendarNames !== null
+        ? (body.calendarNames as Record<string, string>)[calendarId]
+        : null;
+
+      await env.DB.prepare(
+        `INSERT INTO user_calendars (id, user_id, calendar_id, calendar_name, is_primary, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          crypto.randomUUID(),
+          userId,
+          calendarId,
+          calendarName,
+          i === 0 ? 1 : 0,
+          nowIso
+        )
+        .run();
+    }
+
+    // Delete pending auth record
+    await env.DB.prepare("DELETE FROM pending_auth WHERE id = ?").bind(pendingAuthId).run();
+
+    // Queue initial sync
+    await queueInitialSync(env, userId);
+
+    // Create user session cookie
+    const isSecure = new URL(request.url).protocol === "https:";
+    const sessionCookie = await createUserSessionCookie(userId, env, isSecure);
+
+    const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "success");
+
+    // Use server-side redirect to ensure cookie is properly set before navigation
+    const headers = new Headers();
+    headers.set("Location", redirectUrl);
+    headers.append("Set-Cookie", sessionCookie);
+
+    return new Response(null, { status: 303, headers });
+  } catch (error) {
+    console.error("Select calendars error:", error);
+    return jsonWithCors({ ok: false, error: "Failed to save calendar selection" }, request, 500);
+  }
 }

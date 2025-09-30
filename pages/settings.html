@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settings – House Availability</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 2rem 1rem;
+        min-height: 100vh;
+        background: radial-gradient(circle at top, rgba(26, 115, 232, 0.12), transparent 60%);
+      }
+      .container {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      header {
+        margin-bottom: 2rem;
+      }
+      h1 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.75rem;
+      }
+      .back-link {
+        color: #4285f4;
+        text-decoration: none;
+        font-size: 0.9rem;
+      }
+      .back-link:hover {
+        text-decoration: underline;
+      }
+      .card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      .card h2 {
+        margin: 0 0 1rem 0;
+        font-size: 1.25rem;
+      }
+      .card p {
+        color: #64748b;
+        margin: 0 0 1rem 0;
+        font-size: 0.95rem;
+      }
+      .btn {
+        display: inline-block;
+        padding: 0.75rem 1.25rem;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.95rem;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s ease;
+      }
+      .btn-primary {
+        background: #4285f4;
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #357ae8;
+      }
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+      .btn-secondary:hover {
+        background: #cbd5e1;
+      }
+      .btn-danger {
+        background: rgba(220, 38, 38, 0.1);
+        color: #dc2626;
+      }
+      .btn-danger:hover {
+        background: rgba(220, 38, 38, 0.2);
+      }
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .card {
+          background: #1e293b;
+          color: #f1f5f9;
+        }
+        .card p {
+          color: #94a3b8;
+        }
+        .btn-secondary {
+          background: #334155;
+          color: #f1f5f9;
+        }
+        .btn-secondary:hover {
+          background: #475569;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Settings</h1>
+      </header>
+
+      <div class="card">
+        <h2>Calendar Connection</h2>
+        <p>Reconnect your calendar to update your calendar selections or switch providers.</p>
+        <div class="actions">
+          <a href="/auth/google/start" class="btn btn-primary" id="reconnect-google">Reconnect Google Calendar</a>
+          <button class="btn btn-primary" id="reconnect-apple">Reconnect Apple Calendar</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Account</h2>
+        <p>Clear your data and disconnect from the house availability system.</p>
+        <div class="actions">
+          <form method="POST" id="logout-form" style="display: inline;">
+            <button type="submit" class="btn btn-danger">Logout</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- CalDAV form modal -->
+    <div id="caldav-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+      <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 480px; width: 90%;">
+        <h2 style="margin-top: 0;">Apple Calendar Setup</h2>
+        <p style="font-size: 0.9rem; color: #64748b;">You'll need an app-specific password from your iCloud settings.</p>
+        <a href="https://support.apple.com/en-us/102654" target="_blank" style="font-size: 0.85rem; color: #4285f4;">How to generate an app-specific password →</a>
+
+        <form id="caldav-form" style="margin-top: 1.5rem;">
+          <label style="display: block; margin-bottom: 1rem;">
+            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Your Name</span>
+            <input type="text" id="caldav-name" placeholder="John Doe" required
+              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
+          </label>
+
+          <label style="display: block; margin-bottom: 1rem;">
+            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Apple ID Email</span>
+            <input type="email" id="caldav-email" placeholder="your.email@gmail.com" required
+              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
+          </label>
+
+          <label style="display: block; margin-bottom: 1.5rem;">
+            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">App-Specific Password</span>
+            <input type="password" id="caldav-password" placeholder="xxxx-xxxx-xxxx-xxxx" required
+              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
+          </label>
+
+          <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+            <button type="button" class="btn btn-secondary" id="cancel-caldav">Cancel</button>
+            <button type="submit" class="btn btn-primary">Connect Calendar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const workerOrigin = (() => {
+        const { protocol, hostname, port } = window.location;
+        if (port === "8788") return `${protocol}//${hostname}:8787`;
+        return "https://house-availability.simonwisdom.workers.dev";
+      })();
+
+      // Update reconnect links
+      document.getElementById('reconnect-google').href = `${workerOrigin}/auth/google/start`;
+
+      // Update logout form action and handle submission
+      const logoutForm = document.getElementById('logout-form');
+      logoutForm.action = `${workerOrigin}/household/logout`;
+      logoutForm.addEventListener('submit', () => {
+        // Clear localStorage before submitting
+        localStorage.removeItem('user_email');
+      });
+
+      // Handle Apple Calendar reconnect
+      document.getElementById('reconnect-apple').addEventListener('click', () => {
+        document.getElementById('caldav-modal').style.display = 'flex';
+      });
+
+      document.getElementById('cancel-caldav').addEventListener('click', () => {
+        document.getElementById('caldav-modal').style.display = 'none';
+      });
+
+      // Handle CalDAV form submission
+      document.getElementById('caldav-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const displayName = document.getElementById('caldav-name').value.trim();
+        const email = document.getElementById('caldav-email').value.trim();
+        const password = document.getElementById('caldav-password').value.trim();
+
+        try {
+          const response = await fetch(`${workerOrigin}/auth/caldav/setup`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ displayName, email, password })
+          });
+
+          const result = await response.json();
+          if (result.ok && result.redirectUrl) {
+            window.location.href = result.redirectUrl;
+          } else {
+            alert(`Setup failed: ${result.error || 'Unknown error'}`);
+          }
+        } catch (error) {
+          console.error('CalDAV setup error:', error);
+          alert('Failed to connect. Please check your credentials and try again.');
+        }
+      });
+
+    </script>
+  </body>
+</html>

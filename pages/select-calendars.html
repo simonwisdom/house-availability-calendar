@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Select Calendars – House Availability</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 2rem 1rem;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: radial-gradient(circle at top, rgba(26, 115, 232, 0.12), transparent 60%);
+      }
+      main {
+        width: min(640px, 100%);
+        background: white;
+        padding: 2.5rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+      }
+      h1 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.75rem;
+      }
+      .subtitle {
+        color: #64748b;
+        margin: 0 0 1rem 0;
+        font-size: 0.95rem;
+      }
+      .hint {
+        color: #64748b;
+        margin: 0 0 2rem 0;
+        font-size: 0.9rem;
+        font-style: italic;
+      }
+      .loading {
+        text-align: center;
+        padding: 2rem;
+        color: #64748b;
+      }
+      .error {
+        background: rgba(220, 38, 38, 0.12);
+        color: #7f1d1d;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+      }
+      .calendar-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 2rem;
+      }
+      .calendar-item {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        transition: border-color 0.2s ease;
+        cursor: pointer;
+      }
+      .calendar-item:hover {
+        border-color: #cbd5e1;
+      }
+      .calendar-item.selected {
+        border-color: #4285f4;
+        background: rgba(66, 133, 244, 0.05);
+      }
+      .calendar-item.default {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.05);
+      }
+      .calendar-item.default.selected {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+      }
+      .calendar-item input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+        margin-right: 1rem;
+        cursor: pointer;
+      }
+      .calendar-info {
+        flex: 1;
+      }
+      .calendar-name {
+        font-weight: 500;
+        font-size: 1rem;
+        color: #0f172a;
+      }
+      .calendar-name.default {
+        color: #059669;
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+      }
+      button {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      button.primary {
+        background: #4285f4;
+        color: white;
+      }
+      button.primary:hover:not(:disabled) {
+        background: #357ae8;
+      }
+      button.primary:disabled {
+        background: #cbd5e1;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: transparent;
+        color: #64748b;
+      }
+      button.secondary:hover {
+        color: #0f172a;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        main {
+          background: #1e293b;
+          color: #f1f5f9;
+        }
+        .calendar-name {
+          color: #f1f5f9;
+        }
+        .calendar-item {
+          border-color: #334155;
+        }
+        .calendar-item:hover {
+          border-color: #475569;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Select Your Calendars</h1>
+      <p class="subtitle">Choose which calendars to track for availability. You can select multiple calendars.</p>
+      <p class="hint">💡 Most users only need to select the default calendar.</p>
+
+      <div id="loading" class="loading">Loading your calendars...</div>
+      <div id="error" class="error" style="display: none;"></div>
+
+      <div id="calendar-list" class="calendar-list" style="display: none;"></div>
+
+      <div id="actions" class="actions" style="display: none;">
+        <button class="primary" id="continue-btn" disabled>Continue</button>
+      </div>
+    </main>
+
+    <script>
+      const workerOrigin = (() => {
+        const { protocol, hostname, port } = window.location;
+        if (port === "8788") return `${protocol}//${hostname}:8787`;
+        return "https://house-availability.simonwisdom.workers.dev";
+      })();
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const pendingAuthId = urlParams.get("pending_auth_id");
+
+      if (!pendingAuthId) {
+        showError("Missing authentication information. Please try connecting again.");
+      } else {
+        loadCalendars();
+      }
+
+      async function loadCalendars() {
+        try {
+          const response = await fetch(`${workerOrigin}/api/calendars/list?pending_auth_id=${encodeURIComponent(pendingAuthId)}`, {
+            credentials: "include"
+          });
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({ error: "Unknown error" }));
+            throw new Error(data.error || `HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (!data.ok || !data.calendars || data.calendars.length === 0) {
+            throw new Error("No calendars found");
+          }
+
+          renderCalendars(data.calendars);
+        } catch (error) {
+          console.error("Failed to load calendars:", error);
+          showError(`Failed to load calendars: ${error.message}`);
+        }
+      }
+
+      function renderCalendars(calendars) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("calendar-list").style.display = "flex";
+        document.getElementById("actions").style.display = "flex";
+
+        const listEl = document.getElementById("calendar-list");
+        listEl.innerHTML = "";
+
+        calendars.forEach((calendar, index) => {
+          const isDefault = calendar.summary?.includes("(Default)") || false;
+
+          const item = document.createElement("label");
+          item.className = "calendar-item";
+          if (isDefault) {
+            item.classList.add("default");
+          }
+          item.dataset.calendarId = calendar.id;
+          item.dataset.calendarName = calendar.summary || calendar.id;
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = calendar.id;
+          checkbox.id = `calendar-${index}`;
+
+          // Pre-select the default calendar
+          if (isDefault) {
+            checkbox.checked = true;
+            item.classList.add("selected");
+          }
+
+          checkbox.addEventListener("change", updateSelection);
+
+          const info = document.createElement("div");
+          info.className = "calendar-info";
+
+          const name = document.createElement("div");
+          name.className = "calendar-name";
+          if (isDefault) {
+            name.classList.add("default");
+          }
+          name.textContent = calendar.summary || "Unnamed Calendar";
+
+          info.appendChild(name);
+
+          item.appendChild(checkbox);
+          item.appendChild(info);
+
+          listEl.appendChild(item);
+        });
+
+        // Update button state after rendering
+        updateSelection();
+      }
+
+      function updateSelection() {
+        const checkboxes = document.querySelectorAll('.calendar-list input[type="checkbox"]');
+        const continueBtn = document.getElementById("continue-btn");
+
+        let selectedCount = 0;
+        checkboxes.forEach((cb) => {
+          const item = cb.closest(".calendar-item");
+          if (cb.checked) {
+            item.classList.add("selected");
+            selectedCount++;
+          } else {
+            item.classList.remove("selected");
+          }
+        });
+
+        continueBtn.disabled = selectedCount === 0;
+      }
+
+      document.getElementById("continue-btn").addEventListener("click", async () => {
+        const checkboxes = document.querySelectorAll('.calendar-list input[type="checkbox"]:checked');
+        const selectedCalendarIds = Array.from(checkboxes).map((cb) => cb.value);
+
+        const calendarNames = {};
+        checkboxes.forEach((cb) => {
+          const item = cb.closest(".calendar-item");
+          calendarNames[cb.value] = item.dataset.calendarName;
+        });
+
+        if (selectedCalendarIds.length === 0) {
+          return;
+        }
+
+        document.getElementById("continue-btn").disabled = true;
+        document.getElementById("continue-btn").textContent = "Saving...";
+
+        // Construct redirect URL with all data in query params to avoid cross-origin cookie issues
+        const url = new URL(`${workerOrigin}/api/calendars/select`);
+        url.searchParams.set("pendingAuthId", pendingAuthId);
+        url.searchParams.set("calendarIds", JSON.stringify(selectedCalendarIds));
+        url.searchParams.set("calendarNames", JSON.stringify(calendarNames));
+
+        // Use top-level navigation to ensure cookies are properly set
+        window.location.href = url.toString();
+      });
+
+      function showError(message) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("error").textContent = message;
+        document.getElementById("error").style.display = "block";
+      }
+    </script>
+  </body>
+</html>
