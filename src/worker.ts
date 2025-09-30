@@ -30,6 +30,7 @@ function authModeForRoute(method: string, pathname: string): AuthMode {
   if (pathname === "/auth/google/start") return "public";
   if (pathname === "/auth/google/callback") return "public";
   if (pathname === "/auth/caldav/setup") return "public";
+  if (pathname === "/api/availability") return "public";
   if (pathname === "/api/calendars/list") return "public";
   if (pathname === "/api/calendars/select") return "public";
   if (pathname === "/api/user/calendars") return "public";
