@@ -345,6 +345,7 @@
       const workerOrigin = (() => {
         const { protocol, hostname, port } = window.location;
         if (port === "8788") return `${protocol}//${hostname}:8787`;
+        if (port === "64510" || hostname === "localhost") return `${protocol}//${hostname}:${port}`;
         return "https://house-availability.simonwisdom.workers.dev";
       })();
 

@@ -30,7 +30,6 @@ function authModeForRoute(method: string, pathname: string): AuthMode {
   if (pathname === "/auth/google/start") return "public";
   if (pathname === "/auth/google/callback") return "public";
   if (pathname === "/auth/caldav/setup") return "public";
-  if (pathname === "/api/availability") return "public";
   if (pathname === "/api/calendars/list") return "public";
   if (pathname === "/api/calendars/select") return "public";
   if (pathname === "/api/user/calendars") return "public";
@@ -308,6 +307,11 @@ export default {
 
     if (method === "GET" && url.pathname === "/api/user/info") {
       return handleGetUserInfo(request, env);
+    }
+
+    // Serve static assets
+    if (method === "GET") {
+      return handleStaticAsset(request, env);
     }
 
     return new Response("Not found", { status: 404 });
@@ -1003,4 +1007,27 @@ async function handleSelectCalendars(request: Request, env: Env): Promise<Respon
     console.error("Select calendars error:", error);
     return jsonWithCors({ ok: false, error: "Failed to save calendar selection" }, request, 500);
   }
+}
+
+async function handleStaticAsset(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  let pathname = url.pathname;
+
+  // Map root to index.html
+  if (pathname === "/" || pathname === "") {
+    pathname = "/index.html";
+  }
+
+  // Try to fetch the asset
+  const assetRequest = new Request(new URL(pathname, request.url), request);
+  const response = await env.ASSETS.fetch(assetRequest);
+
+  // If not found and it doesn't have an extension, try with .html
+  if (response.status === 404 && !pathname.includes(".")) {
+    const htmlPath = pathname.endsWith("/") ? `${pathname}index.html` : `${pathname}.html`;
+    const htmlRequest = new Request(new URL(htmlPath, request.url), request);
+    return await env.ASSETS.fetch(htmlRequest);
+  }
+
+  return response;
 }

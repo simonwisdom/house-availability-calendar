@@ -10,3 +10,7 @@ crons = ["0 5 * * *"] # 05:00 UTC ≈ 06:00 London during winter
 binding = "DB"
 database_name = "house_availability"
 database_id = "3269b5b8-0dce-42ce-9dbf-8033712a8bae"
+
+[assets]
+directory = "./pages"
+binding = "ASSETS"
