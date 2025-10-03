@@ -18,6 +18,11 @@ type AvailabilityResponse = {
 const SESSION_COOKIE_NAME = "user_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
+type CookieOptions = {
+  isSecure: boolean;
+  sameSite: "Lax" | "None";
+};
+
 type AuthMode = "public" | "page" | "api";
 
 type SessionCheck =
@@ -43,16 +48,15 @@ function authModeForRoute(method: string, pathname: string): AuthMode {
 async function ensureSession(request: Request, env: Env, mode: AuthMode): Promise<SessionCheck> {
   const cookieHeader = request.headers.get("Cookie");
   const cookieValue = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
-  const isSecure = new URL(request.url).protocol === "https:";
 
   if (!cookieValue) {
-    return { authorized: false, response: buildUnauthorizedResponse(request, mode, isSecure) };
+    return { authorized: false, response: buildUnauthorizedResponse(request, env, mode) };
   }
 
   const userId = await decryptUserId(cookieValue, env);
   if (!userId) {
     console.info("Invalid or expired session cookie");
-    return { authorized: false, response: buildUnauthorizedResponse(request, mode, isSecure) };
+    return { authorized: false, response: buildUnauthorizedResponse(request, env, mode) };
   }
 
   return { authorized: true, userId };
@@ -60,21 +64,22 @@ async function ensureSession(request: Request, env: Env, mode: AuthMode): Promis
 
 
 function handleHouseholdLogout(request: Request, env: Env): Response {
-  const isSecure = new URL(request.url).protocol === "https:";
   const url = new URL(request.url);
   const next = sanitizeNextParam(url.searchParams.get("next"));
   const target = resolveRedirectTarget(request, env, next);
+  const cookieOptions = getCookieOptions(request, env);
 
   const headers = new Headers();
   headers.set("Location", target);
-  headers.append("Set-Cookie", buildExpiredSessionCookie(isSecure));
+  headers.append("Set-Cookie", buildExpiredSessionCookie(cookieOptions));
 
   return new Response(null, { status: 303, headers });
 }
 
-async function createUserSessionCookie(userId: string, env: Env, isSecure: boolean): Promise<string> {
+async function createUserSessionCookie(userId: string, env: Env, request: Request): Promise<string> {
   const token = await encryptUserId(userId, env);
-  return buildSessionCookie(token, isSecure);
+  const options = getCookieOptions(request, env);
+  return buildSessionCookie(token, options);
 }
 
 async function encryptUserId(userId: string, env: Env): Promise<string> {
@@ -145,51 +150,75 @@ async function decryptUserId(token: string, env: Env): Promise<string | null> {
   }
 }
 
-function buildUnauthorizedResponse(request: Request, mode: AuthMode, isSecure: boolean): Response {
+function buildUnauthorizedResponse(request: Request, env: Env, mode: AuthMode): Response {
+  const cookieOptions = getCookieOptions(request, env);
   if (mode === "api") {
     const response = jsonWithCors({ ok: false, error: "unauthorized" }, request, 401);
-    response.headers.append("Set-Cookie", buildExpiredSessionCookie(isSecure));
+    response.headers.append("Set-Cookie", buildExpiredSessionCookie(cookieOptions));
     return response;
   }
 
   // Redirect to homepage where users can choose their OAuth provider
   const headers = new Headers();
   headers.set("Location", "/");
-  headers.append("Set-Cookie", buildExpiredSessionCookie(isSecure));
+  headers.append("Set-Cookie", buildExpiredSessionCookie(cookieOptions));
 
   return new Response(null, { status: 303, headers });
 }
 
-function buildSessionCookie(token: string, isSecure: boolean): string {
+function buildSessionCookie(token: string, options: CookieOptions): string {
   const expires = new Date(Date.now() + SESSION_TTL_MS).toUTCString();
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
   const parts = [
     `${SESSION_COOKIE_NAME}=${token}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    `SameSite=${options.sameSite}`,
     `Max-Age=${maxAge}`,
     `Expires=${expires}`,
   ];
-  if (isSecure) {
+  if (options.isSecure) {
     parts.push("Secure");
   }
   return parts.join("; ");
 }
 
-function buildExpiredSessionCookie(isSecure: boolean): string {
+function buildExpiredSessionCookie(options: CookieOptions): string {
   const parts = [
     `${SESSION_COOKIE_NAME}=`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    `SameSite=${options.sameSite}`,
     "Max-Age=0",
     "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
   ];
-  if (isSecure) {
+  if (options.isSecure) {
     parts.push("Secure");
   }
   return parts.join("; ");
+}
+
+function getCookieOptions(request: Request, env: Env): CookieOptions {
+  const requestUrl = new URL(request.url);
+  const isSecure = requestUrl.protocol === "https:";
+  const appBaseUrl = parseUrl(env.APP_BASE_URL);
+  const crossSite = shouldUseSameSiteNone(requestUrl, appBaseUrl);
+  const sameSite: CookieOptions["sameSite"] = isSecure && crossSite ? "None" : "Lax";
+  return { isSecure, sameSite };
+}
+
+function shouldUseSameSiteNone(requestUrl: URL, appBaseUrl?: URL): boolean {
+  if (!appBaseUrl) return false;
+  return appBaseUrl.origin !== requestUrl.origin;
+}
+
+function parseUrl(value: string | undefined): URL | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function sanitizeNextParam(value: FormDataEntryValue | string | null | undefined): string | undefined {
@@ -534,8 +563,7 @@ async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionCo
     ctx.waitUntil(queueInitialSync(env, userId));
 
     // Create user session cookie
-    const isSecure = new URL(request.url).protocol === "https:";
-    const sessionCookie = await createUserSessionCookie(userId, env, isSecure);
+    const sessionCookie = await createUserSessionCookie(userId, env, request);
 
     const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "success");
 
@@ -992,8 +1020,7 @@ async function handleSelectCalendars(request: Request, env: Env): Promise<Respon
     await queueInitialSync(env, userId);
 
     // Create user session cookie
-    const isSecure = new URL(request.url).protocol === "https:";
-    const sessionCookie = await createUserSessionCookie(userId, env, isSecure);
+    const sessionCookie = await createUserSessionCookie(userId, env, request);
 
     const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "success");
 
