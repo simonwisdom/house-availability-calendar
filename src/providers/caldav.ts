@@ -221,7 +221,7 @@ export class CalDAVProvider implements CalendarProvider {
           if (aIsDefault && !bIsDefault) return -1;
           if (!aIsDefault && bIsDefault) return 1;
 
-          return a.summary.localeCompare(b.summary);
+          return (a.summary || "").localeCompare(b.summary || "");
         });
 
         console.log("Found calendars:", calendars.length);

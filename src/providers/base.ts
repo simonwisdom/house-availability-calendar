@@ -1,8 +1,9 @@
 import type { Env } from "../env";
 import { GoogleProvider } from "./google";
 import { CalDAVProvider } from "./caldav";
+import { OutlookProvider } from "./outlook";
 
-export type CalendarProviderType = "google" | "caldav";
+export type CalendarProviderType = "google" | "caldav" | "outlook";
 
 export type BusyWindow = {
   start: string; // ISO 8601
@@ -39,6 +40,8 @@ export function createProvider(env: Env, type: CalendarProviderType): CalendarPr
       return new GoogleProvider(env);
     case "caldav":
       return new CalDAVProvider();
+    case "outlook":
+      return new OutlookProvider(env);
     default:
       throw new Error(`Unknown provider type: ${type}`);
   }

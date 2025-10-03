@@ -1,5 +1,9 @@
 import type { Env } from "./env";
 import { exchangeCodeForTokens, fetchPrimaryCalendar } from "./providers/google";
+import {
+  exchangeCodeForTokens as exchangeOutlookCode,
+  fetchPrimaryCalendar as fetchOutlookPrimaryCalendar,
+} from "./providers/outlook";
 import { detectCalDAVServer } from "./providers/caldav";
 import { performFreeBusySync, buildSyncWindow, DEFAULT_TIMEZONE, HORIZON_DAYS } from "./freebusy";
 
@@ -34,6 +38,8 @@ function authModeForRoute(method: string, pathname: string): AuthMode {
   if (pathname === "/health") return "public";
   if (pathname === "/auth/google/start") return "public";
   if (pathname === "/auth/google/callback") return "public";
+  if (pathname === "/auth/outlook/start") return "public";
+  if (pathname === "/auth/outlook/callback") return "public";
   if (pathname === "/auth/caldav/setup") return "public";
   if (pathname === "/api/calendars/list") return "public";
   if (pathname === "/api/calendars/select") return "public";
@@ -322,6 +328,14 @@ export default {
 
     if (url.pathname === "/auth/google/callback") {
       return handleGoogleCallback(request, env, ctx);
+    }
+
+    if (method === "GET" && url.pathname === "/auth/outlook/start") {
+      return handleOutlookStart(env);
+    }
+
+    if (url.pathname === "/auth/outlook/callback") {
+      return handleOutlookCallback(request, env, ctx);
     }
 
     if (method === "POST" && url.pathname === "/auth/caldav/setup") {
@@ -660,6 +674,125 @@ function buildRedirectUrl(baseUrl: string, _status: "success" | "error"): string
   const target = baseUrl?.trim() || "https://example.com";
   // Just return the base URL without status query param since we're showing status via the dashboard
   return new URL(target).toString();
+}
+
+function handleOutlookStart(env: Env): Response {
+  const redirectUri = env.OUTLOOK_REDIRECT_URI;
+  const clientId = env.OUTLOOK_CLIENT_ID;
+  if (!redirectUri || !clientId) {
+    return Response.json({ ok: false, error: "missing_outlook_config" }, { status: 500 });
+  }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: ["https://graph.microsoft.com/Calendars.Read", "offline_access", "openid", "email", "profile"].join(
+      " "
+    ),
+    response_mode: "query",
+  });
+
+  const url = new URL("https://login.microsoftonline.com/common/oauth2/v2.0/authorize");
+  url.search = params.toString();
+
+  return Response.redirect(url.toString(), 302);
+}
+
+async function handleOutlookCallback(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  if (!code) {
+    return Response.json({ ok: false, error: "missing_code" }, { status: 400 });
+  }
+
+  try {
+    const tokens = await exchangeOutlookCode(env, code);
+
+    // Fetch primary calendar and user email
+    const primaryCalendar = await fetchOutlookPrimaryCalendar(tokens.access_token);
+
+    // For Outlook, we need to fetch user profile to get email
+    const profileResponse = await fetch("https://graph.microsoft.com/v1.0/me", {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+
+    if (!profileResponse.ok) {
+      throw new Error("Failed to fetch Outlook user profile");
+    }
+
+    const profile = (await profileResponse.json()) as {
+      mail?: string;
+      userPrincipalName?: string;
+      displayName?: string;
+    };
+
+    const email = profile.mail || profile.userPrincipalName || "unknown@outlook.com";
+    const displayName = profile.displayName || email;
+    const nowIso = new Date().toISOString();
+
+    // Use primary calendar directly - skip calendar picker
+    const primaryCalendarId = primaryCalendar.id;
+
+    // Create or update user directly
+    const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?")
+      .bind(email)
+      .first<{ id: string }>();
+
+    const userId = existing?.id ?? crypto.randomUUID();
+
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE users
+         SET display_name = ?,
+             provider = 'outlook',
+             calendar_id = ?,
+             refresh_token_encrypted = ?,
+             last_auth_at = ?,
+             updated_at = ?
+         WHERE id = ?`
+      )
+        .bind(displayName, primaryCalendarId, tokens.refresh_token, nowIso, nowIso, userId)
+        .run();
+
+      // Delete existing calendar selections
+      await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO users (id, email, display_name, provider, calendar_id, refresh_token_encrypted, last_auth_at, created_at, updated_at)
+         VALUES (?, ?, ?, 'outlook', ?, ?, ?, ?, ?)`
+      )
+        .bind(userId, email, displayName, primaryCalendarId, tokens.refresh_token, nowIso, nowIso, nowIso)
+        .run();
+    }
+
+    // Store the primary calendar in user_calendars
+    await env.DB.prepare(
+      `INSERT INTO user_calendars (id, user_id, calendar_id, calendar_name, is_primary, created_at)
+       VALUES (?, ?, ?, ?, 1, ?)`
+    )
+      .bind(crypto.randomUUID(), userId, primaryCalendarId, primaryCalendar.summary, nowIso)
+      .run();
+
+    // Queue initial sync
+    ctx.waitUntil(queueInitialSync(env, userId));
+
+    // Create user session cookie
+    const sessionCookie = await createUserSessionCookie(userId, env, request);
+
+    const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "success");
+
+    // Redirect to dashboard
+    const headers = new Headers();
+    headers.set("Location", redirectUrl);
+    headers.append("Set-Cookie", sessionCookie);
+
+    return new Response(null, { status: 303, headers });
+  } catch (error) {
+    console.error("Outlook OAuth callback error:", error);
+    const redirectUrl = buildRedirectUrl(env.APP_BASE_URL, "error");
+    return Response.redirect(redirectUrl, 303);
+  }
 }
 
 async function handleCalDAVSetup(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
