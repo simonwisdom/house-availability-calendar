@@ -368,11 +368,26 @@
           margin-left: auto;
         }
         .account-indicator {
-          position: static;
-          margin-bottom: 0.5rem;
-          font-size: 0.82rem;
-          padding: 0.4rem 0.6rem;
-          backdrop-filter: blur(8px);
+          position: fixed;
+          top: 0.6rem;
+          right: 0.6rem;
+          margin: 0;
+          padding: 0.45rem;
+          border-radius: 999px;
+          font-size: 1.1rem;
+          background: rgba(248, 250, 252, 0.9);
+          border: 1px solid rgba(148, 163, 184, 0.35);
+          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+          backdrop-filter: blur(12px);
+          z-index: 30;
+        }
+        .account-indicator span {
+          display: none;
+        }
+        .account-indicator .settings-btn {
+          margin: 0;
+          font-size: 1.1rem;
+          line-height: 1;
         }
         #legend {
           display: none;
@@ -477,7 +492,7 @@
   <body>
     <div class="account-indicator" id="account-indicator" style="display: none;">
       <span id="account-email"></span>
-      <a href="/settings.html" class="settings-btn">⚙️</a>
+      <a href="/settings.html" class="settings-btn" aria-label="Account settings" title="Account settings">⚙️</a>
     </div>
 
     <main>
@@ -545,6 +560,18 @@
         if (port === "64510" || hostname === "localhost") return `${protocol}//${hostname}:${port}`;
         return "https://house-availability.simonwisdom.workers.dev";
       })();
+
+      const isLocalDevelopment = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
+      function ensureSettingsVisibleForLocal() {
+        if (!isLocalDevelopment) return;
+        const indicator = document.getElementById('account-indicator');
+        const accountEmailEl = document.getElementById('account-email');
+        if (indicator && accountEmailEl && (indicator.style.display === 'none' || indicator.style.display === '')) {
+          accountEmailEl.textContent = accountEmailEl.textContent || '✓ Local testing';
+          indicator.style.display = 'flex';
+        }
+      }
 
       const palette = [
         "#F1F5F9",
@@ -924,6 +951,8 @@
         document.getElementById('heat-grid').classList.add('blur-mode');
         document.getElementById('legend').classList.add('blur-mode');
 
+        ensureSettingsVisibleForLocal();
+
         // Add some placeholder data for visual effect
         renderPlaceholderGrid();
       }
@@ -934,6 +963,8 @@
         document.getElementById('connect-overlay').style.display = 'none';
         document.getElementById('heat-grid').classList.remove('blur-mode');
         document.getElementById('legend').classList.remove('blur-mode');
+
+        ensureSettingsVisibleForLocal();
       }
 
       function renderPlaceholderGrid() {
@@ -986,6 +1017,7 @@
       }
 
       loadAvailability();
+      ensureSettingsVisibleForLocal();
     </script>
   </body>
 </html>
