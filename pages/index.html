@@ -9,6 +9,10 @@
         color-scheme: light dark;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
+      html,
+      body {
+        height: 100%;
+      }
       body {
         margin: 0;
         padding: 0.75rem 1rem 4rem;
@@ -85,6 +89,14 @@
         font-size: 0.7rem;
         letter-spacing: 0.1em;
         color: rgba(15, 23, 42, 0.55);
+      }
+      .weekday-row,
+      .week-group,
+      .week-days {
+        display: contents;
+      }
+      .day-name {
+        display: none;
       }
       .cell {
         aspect-ratio: 1 / 1;
@@ -258,6 +270,162 @@
         display: inline-block;
       }
 
+      /* Mobile view - streamlined week cards */
+      @media (max-width: 768px) {
+        body {
+          padding: 0.5rem 0.75rem 1.25rem;
+          justify-content: flex-start;
+          align-items: stretch;
+          overflow-y: hidden;
+        }
+        main {
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          max-width: 100%;
+          height: calc(100vh - 1.75rem);
+          min-height: 0;
+          gap: 0.75rem;
+        }
+        header {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.35rem;
+          margin-bottom: 0.25rem;
+        }
+        header h1 {
+          font-size: 1rem;
+        }
+        #heat-grid {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 0.6rem;
+          overflow: hidden;
+          min-height: 0;
+        }
+        .weekday-row {
+          display: none;
+        }
+        .week-group {
+          display: none;
+          padding: 0.85rem;
+          border-radius: 14px;
+          background: rgba(226, 232, 240, 0.82);
+          border: 1px solid rgba(148, 163, 184, 0.35);
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+          backdrop-filter: blur(6px);
+        }
+        .week-group.active {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          flex: 1;
+        }
+        .week-group .week-label {
+          font-size: 0.9rem;
+          font-weight: 600;
+          color: rgba(15, 23, 42, 0.8);
+          margin-bottom: 0.1rem;
+        }
+        .week-days {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 0.4rem;
+        }
+        .cell {
+          flex: 0 0 auto;
+          aspect-ratio: auto;
+          width: 100%;
+          padding: 0.55rem 0.7rem;
+          flex-direction: row;
+          align-items: center;
+          gap: 0.65rem;
+          border-radius: 12px;
+          min-height: 0;
+        }
+        .cell.empty {
+          display: none;
+        }
+        .day-name {
+          display: block;
+          font-size: 0.62rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(15, 23, 42, 0.52);
+          flex: 0 0 auto;
+        }
+        .count {
+          font-size: 1.2rem;
+          line-height: 1.2;
+          color: rgba(15, 23, 42, 0.9);
+        }
+        .date {
+          font-size: 0.7rem;
+          opacity: 0.62;
+          margin-left: auto;
+        }
+        .account-indicator {
+          position: static;
+          margin-bottom: 0.5rem;
+          font-size: 0.82rem;
+          padding: 0.4rem 0.6rem;
+          backdrop-filter: blur(8px);
+        }
+        #legend {
+          display: none;
+        }
+        .week-nav {
+          position: sticky;
+          top: 0.35rem;
+          z-index: 10;
+          padding: 0.45rem 0.6rem;
+          border-radius: 12px;
+          background: rgba(248, 250, 252, 0.9);
+          box-shadow: 0 12px 25px rgba(15, 23, 42, 0.12);
+          backdrop-filter: blur(10px);
+          margin-bottom: 0;
+        }
+        .week-nav .week-title {
+          font-size: 0.95rem;
+        }
+      }
+      .week-nav {
+        display: none;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        gap: 1rem;
+      }
+      .week-nav button {
+        padding: 0.5rem 1rem;
+        background: #4285f4;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+      .week-nav button:hover {
+        background: #357ae8;
+      }
+      .week-nav button:disabled {
+        background: #cbd5e1;
+        cursor: not-allowed;
+      }
+      .week-nav .week-title {
+        font-weight: 600;
+        font-size: 1rem;
+      }
+      @media (max-width: 768px) {
+        .week-nav {
+          display: flex;
+        }
+      }
+
       @media (prefers-color-scheme: dark) {
         .connect-overlay {
           background: #1e293b;
@@ -279,6 +447,30 @@
         .account-indicator a {
           color: #f1f5f9;
         }
+        .week-group {
+          background: rgba(30, 41, 59, 0.85);
+          border-color: rgba(71, 85, 105, 0.65);
+          box-shadow: 0 16px 36px rgba(2, 6, 23, 0.55);
+        }
+        .week-group .week-label {
+          color: rgba(226, 232, 240, 0.95);
+        }
+        .day-name {
+          color: rgba(148, 163, 184, 0.75);
+        }
+        .week-nav button {
+          background: #334155;
+        }
+        .week-nav button:hover {
+          background: #475569;
+        }
+        .week-nav button:disabled {
+          background: #1e293b;
+        }
+        .week-nav {
+          background: rgba(15, 23, 42, 0.92);
+          box-shadow: 0 18px 32px rgba(2, 6, 23, 0.65);
+        }
       }
     </style>
   </head>
@@ -299,6 +491,11 @@
            style="display: none;">Connect Google Calendar</a>
       </header>
 
+      <div class="week-nav">
+        <button id="prev-week">← Prev</button>
+        <div class="week-title" id="week-title">Week of Oct 3</div>
+        <button id="next-week">Next →</button>
+      </div>
       <section id="heat-grid"></section>
       <section id="legend"></section>
     </main>
@@ -371,6 +568,12 @@
       const providerSelection = document.getElementById("provider-selection");
       const caldavForm = document.getElementById("caldav-form");
       const backToProviders = document.getElementById("back-to-providers");
+      const prevWeekBtn = document.getElementById("prev-week");
+      const nextWeekBtn = document.getElementById("next-week");
+      const weekTitle = document.getElementById("week-title");
+
+      let currentWeekIndex = 0;
+      let totalWeeks = 0;
 
       if (connectButton) {
         connectButton.href = `${workerOrigin}/auth/google/start`;
@@ -500,44 +703,85 @@
         legend.appendChild(frag);
       }
 
+      function updateWeekNavigation() {
+        if (prevWeekBtn && nextWeekBtn) {
+          prevWeekBtn.disabled = currentWeekIndex === 0;
+          nextWeekBtn.disabled = currentWeekIndex >= totalWeeks - 1;
+        }
+
+        // Update visible week on mobile
+        const allElements = document.querySelectorAll('.week-row');
+        allElements.forEach((el) => {
+          const weekIdx = parseInt(el.dataset.weekIndex);
+          if (weekIdx === currentWeekIndex) {
+            el.classList.add('active');
+          } else {
+            el.classList.remove('active');
+          }
+        });
+      }
+
       function renderHeatMap(data) {
         const timezone = data.timezone || "Europe/London";
         if (tzEl) tzEl.textContent = timezone;
         lastUpdatedEl.textContent = formatRelative(data.lastUpdatedIso, timezone);
 
         const weeks = buildWeeks(data.days);
+        totalWeeks = weeks.length;
+
+        // Find the week containing today
         const todayIso = getTodayIso(timezone);
+        currentWeekIndex = weeks.findIndex(week =>
+          week.some(day => day && day.date === todayIso)
+        );
+        if (currentWeekIndex === -1) currentWeekIndex = 0;
+
         const maxFree = data.days.reduce((acc, day) => Math.max(acc, day.freeCount), 0);
         const scaleMax = Math.max(maxFree, palette.length - 1);
 
         heatGrid.innerHTML = "";
         const frag = document.createDocumentFragment();
 
+        const headerRow = document.createElement("div");
+        headerRow.className = "weekday-row";
+
         const spacer = document.createElement("div");
         spacer.className = "week-label heading";
-        frag.appendChild(spacer);
+        headerRow.appendChild(spacer);
 
         weekdayNames.forEach((name) => {
           const head = document.createElement("div");
           head.className = "weekday heading";
           head.textContent = name;
-          frag.appendChild(head);
+          headerRow.appendChild(head);
         });
 
-        weeks.forEach((week) => {
+        frag.appendChild(headerRow);
+
+        weeks.forEach((week, weekIdx) => {
           const firstDay = week.find(Boolean);
+
+          const group = document.createElement("div");
+          group.className = "week-group week-row";
+          group.dataset.weekIndex = weekIdx;
+
           const label = document.createElement("div");
           label.className = "week-label";
           label.textContent = firstDay ? `Week of ${formatWeekLabel(firstDay.date)}` : "";
-          frag.appendChild(label);
+          group.appendChild(label);
+
+          const daysWrap = document.createElement("div");
+          daysWrap.className = "week-days";
+          group.appendChild(daysWrap);
 
           week.forEach((day, idx) => {
             const cell = document.createElement("div");
             cell.className = "cell";
+            cell.dataset.weekIndex = weekIdx;
 
             if (!day) {
               cell.classList.add("empty");
-              frag.appendChild(cell);
+              daysWrap.appendChild(cell);
               return;
             }
 
@@ -548,6 +792,10 @@
             if (day.date === todayIso) cell.classList.add("today");
             if (day.freeCount === maxFree && maxFree > 0) cell.classList.add("peak");
 
+            const dayName = document.createElement("div");
+            dayName.className = "day-name";
+            dayName.textContent = weekdayNames[idx];
+
             const count = document.createElement("div");
             count.className = "count";
             count.textContent = day.freeCount.toString();
@@ -556,13 +804,24 @@
             dateLabel.className = "date";
             dateLabel.textContent = formatDate(day.date);
 
-            cell.append(count, dateLabel);
-            frag.appendChild(cell);
+            cell.append(dayName, count, dateLabel);
+            daysWrap.appendChild(cell);
           });
+
+          frag.appendChild(group);
         });
 
         heatGrid.appendChild(frag);
         buildLegend(maxFree, scaleMax);
+
+        // Update week title
+        const currentWeek = weeks[currentWeekIndex];
+        const firstDay = currentWeek ? currentWeek.find(Boolean) : null;
+        if (weekTitle && firstDay) {
+          weekTitle.textContent = `Week of ${formatWeekLabel(firstDay.date)}`;
+        }
+
+        updateWeekNavigation();
       }
 
       async function loadAvailability() {
@@ -694,6 +953,35 @@
           timezone: 'Europe/London',
           days: fakeDays,
           lastUpdatedIso: null
+        });
+      }
+
+      // Week navigation handlers
+      if (prevWeekBtn) {
+        prevWeekBtn.addEventListener('click', () => {
+          if (currentWeekIndex > 0) {
+            currentWeekIndex--;
+            const firstCell = document.querySelector(`[data-week-index="${currentWeekIndex}"].cell:not(.empty)`);
+            if (weekTitle && firstCell) {
+              const dateText = firstCell.querySelector('.date').textContent;
+              weekTitle.textContent = `Week of ${dateText}`;
+            }
+            updateWeekNavigation();
+          }
+        });
+      }
+
+      if (nextWeekBtn) {
+        nextWeekBtn.addEventListener('click', () => {
+          if (currentWeekIndex < totalWeeks - 1) {
+            currentWeekIndex++;
+            const firstCell = document.querySelector(`[data-week-index="${currentWeekIndex}"].cell:not(.empty)`);
+            if (weekTitle && firstCell) {
+              const dateText = firstCell.querySelector('.date').textContent;
+              weekTitle.textContent = `Week of ${dateText}`;
+            }
+            updateWeekNavigation();
+          }
         });
       }
 

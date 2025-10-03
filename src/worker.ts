@@ -46,6 +46,12 @@ function authModeForRoute(method: string, pathname: string): AuthMode {
 }
 
 async function ensureSession(request: Request, env: Env, mode: AuthMode): Promise<SessionCheck> {
+  // Bypass auth for localhost
+  const url = new URL(request.url);
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    return { authorized: true, userId: "local-dev-user" };
+  }
+
   const cookieHeader = request.headers.get("Cookie");
   const cookieValue = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
 
