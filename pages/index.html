@@ -887,6 +887,22 @@
         if (tzEl) tzEl.textContent = timezone;
         setLastUpdatedDisplay(formatRelative(data.lastUpdatedIso, timezone));
 
+        // Calculate unique contributing users
+        const uniqueUsers = new Set();
+        data.days.forEach(day => {
+          if (day.freeUserIds && Array.isArray(day.freeUserIds)) {
+            day.freeUserIds.forEach(userId => uniqueUsers.add(userId));
+          }
+        });
+        const userCount = uniqueUsers.size;
+
+        // Update account indicator with user count
+        const accountEmailEl = document.getElementById('account-email');
+        const userEmail = localStorage.getItem('user_email');
+        if (accountEmailEl && userEmail && userCount > 0) {
+          accountEmailEl.textContent = `✓ ${userEmail} (${userCount} user${userCount !== 1 ? 's' : ''})`;
+        }
+
         const weeks = buildWeeks(data.days);
         totalWeeks = weeks.length;
 
@@ -1052,24 +1068,6 @@
         if (accountIndicator && accountEmailEl) {
           accountEmailEl.textContent = `✓ ${userEmail}`;
           accountIndicator.style.display = 'flex';
-        }
-
-        try {
-          const response = await fetch(`${workerOrigin}/api/user/calendars?email=${encodeURIComponent(userEmail)}`, {
-            credentials: "include"
-          });
-
-          if (!response.ok) return;
-
-          const data = await response.json();
-          if (data.ok && data.calendars && data.calendars.length > 0) {
-            // Update account indicator with calendar count
-            if (accountEmailEl) {
-              accountEmailEl.textContent = `✓ ${userEmail} (${data.calendars.length} calendar${data.calendars.length !== 1 ? 's' : ''})`;
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load user calendars:', error);
         }
       }
 
