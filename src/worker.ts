@@ -687,9 +687,14 @@ function handleOutlookStart(env: Env): Response {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: ["https://graph.microsoft.com/Calendars.Read", "offline_access", "openid", "email", "profile"].join(
-      " "
-    ),
+    scope: [
+      "https://graph.microsoft.com/Calendars.Read",
+      "https://graph.microsoft.com/User.Read",
+      "offline_access",
+      "openid",
+      "email",
+      "profile",
+    ].join(" "),
     response_mode: "query",
   });
 

@@ -207,7 +207,6 @@ export async function exchangeCodeForTokens(env: Env, code: string): Promise<Out
     code,
     grant_type: "authorization_code",
     redirect_uri: env.OUTLOOK_REDIRECT_URI,
-    scope: "https://graph.microsoft.com/Calendars.Read offline_access",
   });
 
   const response = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
