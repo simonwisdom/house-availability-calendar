@@ -847,11 +847,26 @@ async function handleGetUserInfo(request: Request, env: Env): Promise<Response> 
 
     const calendars = userCalendars?.map((c) => c.calendarName || c.calendarId) || [];
 
+    const { results: contributorRows } = await env.DB.prepare(
+      `SELECT u.email
+         FROM users u
+        WHERE (
+          u.calendar_id IS NOT NULL AND TRIM(u.calendar_id) != ''
+        )
+           OR EXISTS (
+             SELECT 1 FROM user_calendars uc WHERE uc.user_id = u.id
+           )
+        ORDER BY LOWER(u.email), u.email`
+    ).all<{ email: string }>();
+
+    const contributors = contributorRows?.map((row) => row.email) || [];
+
     return jsonWithCors({
       ok: true,
       email: user.email,
       displayName: user.display_name,
-      calendars
+      calendars,
+      contributors,
     }, request);
   } catch (error) {
     console.error("Get user info error:", error);

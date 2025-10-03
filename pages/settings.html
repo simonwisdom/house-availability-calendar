@@ -122,7 +122,7 @@
       <div class="card">
         <h2>Calendar Connection</h2>
         <div id="synced-calendars" style="display: none; margin-bottom: 1rem;">
-          <p style="margin-bottom: 0.5rem; font-weight: 500; color: #0f172a;">Synced calendars:</p>
+          <p style="margin-bottom: 0.5rem; font-weight: 500; color: #0f172a;">Calendars contributing to main calendar:</p>
           <ul id="calendar-list" style="margin: 0; padding-left: 1.5rem; color: #64748b; font-size: 0.95rem;"></ul>
         </div>
         <p>Reconnect your calendar to update your calendar selections or switch providers.</p>
@@ -196,9 +196,9 @@
 
           if (response.ok) {
             const data = await response.json();
-            if (data.ok && data.calendars && data.calendars.length > 0) {
+            if (data.ok && data.contributors && data.contributors.length > 0) {
               const calendarList = document.getElementById('calendar-list');
-              calendarList.innerHTML = data.calendars.map(cal => `<li>${cal}</li>`).join('');
+              calendarList.innerHTML = data.contributors.map(email => `<li>${email}</li>`).join('');
               document.getElementById('synced-calendars').style.display = 'block';
             }
           }
