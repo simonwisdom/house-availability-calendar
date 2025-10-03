@@ -38,6 +38,43 @@
         font-size: 1.15rem;
         font-weight: 500;
       }
+      .timezone-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: rgba(15, 23, 42, 0.7);
+      }
+      .mobile-caption {
+        display: none;
+      }
+      .last-updated-inline {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 0.4rem;
+        font-size: 0.85rem;
+        color: rgba(15, 23, 42, 0.7);
+      }
+      .last-updated-inline::before {
+        content: "• ";
+        margin-right: 0.05rem;
+      }
+      .header-separator {
+        margin: 0 0.4rem;
+        color: rgba(15, 23, 42, 0.35);
+      }
+      .header-meta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.85rem;
+        color: rgba(15, 23, 42, 0.68);
+      }
+      .header-meta .mobile-caption {
+        font-size: 0.7rem;
+        letter-spacing: 0.04em;
+        color: rgba(15, 23, 42, 0.55);
+        font-weight: 600;
+      }
       .account-indicator {
         position: fixed;
         top: 1rem;
@@ -56,9 +93,6 @@
         color: #0f172a;
         text-decoration: none;
         margin-left: 0.25rem;
-      }
-      #last-updated {
-        color: rgba(0, 0, 0, 0.68);
       }
       #heat-grid {
         display: grid;
@@ -155,6 +189,10 @@
         border-radius: 999px;
         display: inline-block;
         border: 1px solid rgba(15, 23, 42, 0.08);
+      }
+
+      .mobile-footer {
+        display: none;
       }
 
       /* Connect button styles */
@@ -290,11 +328,49 @@
         header {
           flex-direction: column;
           align-items: flex-start;
-          gap: 0.35rem;
+          gap: 0.2rem;
           margin-bottom: 0.25rem;
         }
         header h1 {
           font-size: 1rem;
+        }
+        .timezone-label {
+          display: none;
+        }
+        .last-updated-inline {
+          display: none;
+        }
+        .header-separator {
+          display: none;
+        }
+        #last-updated-text {
+          display: none;
+        }
+        .header-meta {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.2rem;
+          font-size: 1rem;
+          color: rgba(15, 23, 42, 0.68);
+        }
+        .header-meta .mobile-caption {
+          display: block;
+          font-size: 1.12rem;
+          font-weight: 600;
+          letter-spacing: 0.01em;
+          color: rgba(15, 23, 42, 0.82);
+          line-height: 1.15;
+        }
+        .mobile-footer {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 0.72rem;
+          color: rgba(15, 23, 42, 0.55);
+          padding-bottom: 0.25rem;
+          flex-shrink: 0;
         }
         #heat-grid {
           flex: 1;
@@ -470,6 +546,24 @@
         .week-group .week-label {
           color: rgba(226, 232, 240, 0.95);
         }
+        .last-updated-inline {
+          color: rgba(203, 213, 225, 0.8);
+        }
+        .header-separator {
+          color: rgba(148, 163, 184, 0.5);
+        }
+        .timezone-label {
+          color: rgba(203, 213, 225, 0.8);
+        }
+        .header-meta {
+          color: rgba(203, 213, 225, 0.78);
+        }
+        .header-meta .mobile-caption {
+          color: rgba(148, 163, 184, 0.7);
+        }
+        .mobile-footer {
+          color: rgba(203, 213, 225, 0.72);
+        }
         .day-name {
           color: rgba(148, 163, 184, 0.75);
         }
@@ -497,9 +591,15 @@
 
     <main>
       <header>
-        <h1>🌆 Evening (18:00-22:00) • 🌍 <span id="timezone">Europe/London</span></h1>
-        <span>•</span>
-        <span id="last-updated">Loading…</span>
+        <h1>
+          <span class="timezone-label">🌍 <span id="timezone">Europe/London</span></span>
+          <span id="last-updated-inline" class="last-updated-inline">Loading…</span>
+        </h1>
+        <span class="header-separator">•</span>
+        <span id="last-updated" class="header-meta">
+          <span id="last-updated-text">Loading…</span>
+          <span class="mobile-caption"># of housemates free from 6-10pm</span>
+        </span>
         <a href="https://house-availability.simonwisdom.workers.dev/auth/google/start"
            class="connect-btn"
            id="connect-button"
@@ -513,6 +613,9 @@
       </div>
       <section id="heat-grid"></section>
       <section id="legend"></section>
+      <footer id="mobile-footer" class="mobile-footer">
+        <span id="last-updated-mobile">Loading…</span>
+      </footer>
     </main>
 
     <!-- Connect overlay shown when no data -->
@@ -587,7 +690,11 @@
 
       const heatGrid = document.getElementById("heat-grid");
       const tzEl = document.getElementById("timezone");
-      const lastUpdatedEl = document.getElementById("last-updated");
+      const lastUpdatedContainer = document.getElementById("last-updated");
+      const lastUpdatedTextEl = document.getElementById("last-updated-text");
+      const lastUpdatedInlineEl = document.getElementById("last-updated-inline");
+      const mobileFooter = document.getElementById("mobile-footer");
+      const lastUpdatedMobileEl = document.getElementById("last-updated-mobile");
       const legend = document.getElementById("legend");
       const connectButton = document.getElementById("connect-button");
       const overlayConnectGoogle = document.getElementById("overlay-connect-google");
@@ -653,6 +760,19 @@
             alert("Failed to connect. Please check your credentials and try again.");
           }
         });
+      }
+
+      function setLastUpdatedDisplay(text) {
+        const content = text || 'Loading…';
+        if (lastUpdatedTextEl) {
+          lastUpdatedTextEl.textContent = content;
+        }
+        if (lastUpdatedInlineEl) {
+          lastUpdatedInlineEl.textContent = content;
+        }
+        if (lastUpdatedMobileEl) {
+          lastUpdatedMobileEl.textContent = content;
+        }
       }
 
       function formatDate(dateStr) {
@@ -751,7 +871,7 @@
       function renderHeatMap(data) {
         const timezone = data.timezone || "Europe/London";
         if (tzEl) tzEl.textContent = timezone;
-        lastUpdatedEl.textContent = formatRelative(data.lastUpdatedIso, timezone);
+        setLastUpdatedDisplay(formatRelative(data.lastUpdatedIso, timezone));
 
         const weeks = buildWeeks(data.days);
         totalWeeks = weeks.length;
@@ -885,7 +1005,7 @@
           await loadUserInfo();
           loadUserCalendars();
         } catch (error) {
-          lastUpdatedEl.textContent = "Unable to load availability.";
+          setLastUpdatedDisplay("Unable to load availability.");
           console.error(error);
           showConnectState();
         }
@@ -941,15 +1061,26 @@
 
       function showConnectState() {
         // Show connect button in header
-        document.getElementById('connect-button').style.display = 'inline-block';
-        document.getElementById('last-updated').style.display = 'none';
+        if (connectButton) {
+          connectButton.style.display = 'inline-block';
+        }
+        if (lastUpdatedContainer) {
+          lastUpdatedContainer.style.display = 'none';
+        }
+        if (mobileFooter) {
+          mobileFooter.style.display = 'none';
+        }
 
         // Show overlay
         document.getElementById('connect-overlay').style.display = 'block';
 
         // Blur the grid
-        document.getElementById('heat-grid').classList.add('blur-mode');
-        document.getElementById('legend').classList.add('blur-mode');
+        if (heatGrid) {
+          heatGrid.classList.add('blur-mode');
+        }
+        if (legend) {
+          legend.classList.add('blur-mode');
+        }
 
         ensureSettingsVisibleForLocal();
 
@@ -958,11 +1089,22 @@
       }
 
       function hideConnectState() {
-        document.getElementById('connect-button').style.display = 'none';
-        document.getElementById('last-updated').style.display = 'block';
+        if (connectButton) {
+          connectButton.style.display = 'none';
+        }
+        if (lastUpdatedContainer) {
+          lastUpdatedContainer.style.display = '';
+        }
+        if (mobileFooter) {
+          mobileFooter.style.display = '';
+        }
         document.getElementById('connect-overlay').style.display = 'none';
-        document.getElementById('heat-grid').classList.remove('blur-mode');
-        document.getElementById('legend').classList.remove('blur-mode');
+        if (heatGrid) {
+          heatGrid.classList.remove('blur-mode');
+        }
+        if (legend) {
+          legend.classList.remove('blur-mode');
+        }
 
         ensureSettingsVisibleForLocal();
       }
