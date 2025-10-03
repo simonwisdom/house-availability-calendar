@@ -44,6 +44,50 @@
         gap: 8px;
         align-items: stretch;
       }
+      .week-container {
+        display: contents;
+      }
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem 0 2rem;
+        }
+        main {
+          width: 100%;
+          padding: 0;
+        }
+        header {
+          padding: 0 1rem;
+        }
+        #legend {
+          padding: 0 1rem;
+        }
+        #heat-grid {
+          display: block;
+          overflow-x: auto;
+          scroll-snap-type: x mandatory;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        #heat-grid::-webkit-scrollbar {
+          display: none;
+        }
+        .week-container {
+          display: inline-grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 6px;
+          width: 100vw;
+          padding: 0 1rem;
+          box-sizing: border-box;
+          scroll-snap-align: start;
+        }
+        .week-label {
+          display: none;
+        }
+        .weekday.heading {
+          font-size: 0.65rem;
+          padding-bottom: 4px;
+        }
+      }
       .week-label {
         font-size: 0.95rem;
         font-weight: 600;
@@ -265,13 +309,16 @@
           label.textContent = firstDay ? `Week of ${formatWeekLabel(firstDay.date)}` : "";
           frag.appendChild(label);
 
+          const weekContainer = document.createElement("div");
+          weekContainer.className = "week-container";
+
           week.forEach((day, idx) => {
             const cell = document.createElement("div");
             cell.className = "cell";
 
             if (!day) {
               cell.classList.add("empty");
-              frag.appendChild(cell);
+              weekContainer.appendChild(cell);
               return;
             }
 
@@ -291,8 +338,10 @@
             dateLabel.textContent = formatDate(day.date);
 
             cell.append(count, dateLabel);
-            frag.appendChild(cell);
+            weekContainer.appendChild(cell);
           });
+
+          frag.appendChild(weekContainer);
         });
 
         heatGrid.appendChild(frag);
