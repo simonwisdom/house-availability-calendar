@@ -831,7 +831,22 @@ async function handleGetUserInfo(request: Request, env: Env): Promise<Response> 
       return jsonWithCors({ ok: false, error: "User not found" }, request, 404);
     }
 
-    return jsonWithCors({ ok: true, email: user.email, displayName: user.display_name }, request);
+    // Fetch user's synced calendars
+    const { results: userCalendars } = await env.DB.prepare(
+      `SELECT calendar_id as calendarId, calendar_name as calendarName
+       FROM user_calendars WHERE user_id = ? ORDER BY is_primary DESC, calendar_name ASC`
+    )
+      .bind(session.userId)
+      .all<{ calendarId: string; calendarName: string | null }>();
+
+    const calendars = userCalendars?.map((c) => c.calendarName || c.calendarId) || [];
+
+    return jsonWithCors({
+      ok: true,
+      email: user.email,
+      displayName: user.display_name,
+      calendars
+    }, request);
   } catch (error) {
     console.error("Get user info error:", error);
     return jsonWithCors({ ok: false, error: "Failed to get user info" }, request, 500);
