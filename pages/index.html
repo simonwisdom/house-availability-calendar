@@ -16,23 +16,28 @@
       }
       body {
         margin: 0;
-        padding: 0.75rem 1rem 4rem;
+        padding: 0.75rem 1rem;
         min-height: 100vh;
+        height: 100vh;
         display: flex;
         justify-content: center;
         background: radial-gradient(circle at top, rgba(26, 115, 232, 0.12), transparent 60%);
+        overflow: hidden;
       }
       main {
         width: min(920px, 100%);
-        display: grid;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
         gap: 0.75rem;
       }
       header {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
         font-size: 0.9rem;
+        flex-shrink: 0;
       }
       header h1 {
         margin: 0;
@@ -40,24 +45,16 @@
         font-weight: 500;
       }
       .timezone-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        color: rgba(15, 23, 42, 0.7);
-      }
-      .mobile-caption {
         display: none;
       }
-      .last-updated-inline {
-        display: inline-flex;
-        align-items: center;
-        margin-left: 0.4rem;
-        font-size: 0.85rem;
-        color: rgba(15, 23, 42, 0.7);
+      .mobile-caption {
+        display: block;
+        font-size: 1.15rem;
+        font-weight: 500;
+        color: rgba(15, 23, 42, 0.85);
       }
-      .last-updated-inline::before {
-        content: "• ";
-        margin-right: 0.05rem;
+      .last-updated-inline {
+        display: none;
       }
       .header-separator {
         margin: 0 0.4rem;
@@ -71,10 +68,12 @@
         color: rgba(15, 23, 42, 0.68);
       }
       .header-meta .mobile-caption {
-        font-size: 0.7rem;
-        letter-spacing: 0.04em;
-        color: rgba(15, 23, 42, 0.55);
-        font-weight: 600;
+        font-size: 1.15rem;
+        font-weight: 500;
+        color: rgba(15, 23, 42, 0.85);
+      }
+      #last-updated-text {
+        display: none;
       }
       .account-indicator {
         position: fixed;
@@ -99,7 +98,11 @@
         display: grid;
         grid-template-columns: minmax(120px, 0.9fr) repeat(7, minmax(88px, 1fr));
         gap: 8px;
-        align-items: stretch;
+        align-items: start;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+        align-content: start;
       }
       .week-label {
         font-size: 0.95rem;
@@ -134,6 +137,7 @@
         display: none;
       }
       .cell {
+        width: 100%;
         aspect-ratio: 1 / 1;
         border-radius: 12px;
         display: flex;
@@ -144,6 +148,8 @@
         color: #0f172a;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
         box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+        min-height: 0;
+        min-width: 0;
       }
       .cell:hover {
         transform: translateY(-2px);
@@ -178,6 +184,7 @@
         font-size: 0.85rem;
         color: rgba(15, 23, 42, 0.7);
         align-items: center;
+        flex-shrink: 0;
       }
       .legend-item {
         display: flex;
@@ -193,7 +200,13 @@
       }
 
       .mobile-footer {
-        display: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 0.85rem;
+        color: rgba(15, 23, 42, 0.65);
+        padding-top: 0.5rem;
+        flex-shrink: 0;
       }
 
       /* Connect button styles */
@@ -378,8 +391,9 @@
           display: flex;
           flex-direction: column;
           gap: 0.6rem;
-          overflow: hidden;
+          overflow-y: auto;
           min-height: 0;
+          align-content: initial;
         }
         .weekday-row {
           display: none;
@@ -398,6 +412,7 @@
           flex-direction: column;
           gap: 0.5rem;
           flex: 1;
+          align-self: stretch;
         }
         .week-group .week-label {
           display: none;
@@ -411,12 +426,14 @@
         .cell {
           flex: 0 0 auto;
           aspect-ratio: auto;
+          width: auto;
           padding: 0.55rem 0.7rem;
           flex-direction: row;
           align-items: center;
           gap: 0.65rem;
           border-radius: 12px;
           min-height: 0;
+          min-width: 0;
         }
         .cell.empty {
           display: none;
@@ -556,10 +573,10 @@
           color: rgba(203, 213, 225, 0.78);
         }
         .header-meta .mobile-caption {
-          color: rgba(148, 163, 184, 0.7);
+          color: rgba(226, 232, 240, 0.9);
         }
         .mobile-footer {
-          color: rgba(203, 213, 225, 0.72);
+          color: rgba(148, 163, 184, 0.8);
         }
         .day-name {
           color: rgba(148, 163, 184, 0.75);
