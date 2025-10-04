@@ -88,21 +88,11 @@ async function handleHouseholdLogout(request: Request, env: Env, ctx: ExecutionC
   if (cookieValue) {
     const userId = await decryptUserId(cookieValue, env);
     if (userId) {
-      // Disconnect calendar: clear user's calendar data
+      // Delete user and all their data
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM freebusy_windows WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM daily_availability WHERE user_id = ?").bind(userId).run();
-
-      // Clear calendar credentials from users table
-      await env.DB.prepare(
-        `UPDATE users
-         SET calendar_id = NULL,
-             refresh_token_encrypted = NULL,
-             caldav_url = NULL,
-             caldav_username = NULL,
-             updated_at = ?
-         WHERE id = ?`
-      ).bind(new Date().toISOString(), userId).run();
+      await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
 
       // Recompute daily summaries in background since user's availability has changed
       const timezone = env.HOUSE_TIMEZONE || DEFAULT_TIMEZONE;
