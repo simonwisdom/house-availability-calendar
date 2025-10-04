@@ -75,17 +75,99 @@ async function ensureSession(request: Request, env: Env, mode: AuthMode): Promis
 }
 
 
-function handleHouseholdLogout(request: Request, env: Env): Response {
+async function handleHouseholdLogout(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const next = sanitizeNextParam(url.searchParams.get("next"));
   const target = resolveRedirectTarget(request, env, next);
   const cookieOptions = getCookieOptions(request, env);
+
+  // Get userId from session before clearing it
+  const cookieHeader = request.headers.get("Cookie");
+  const cookieValue = getCookieValue(cookieHeader, SESSION_COOKIE_NAME);
+
+  if (cookieValue) {
+    const userId = await decryptUserId(cookieValue, env);
+    if (userId) {
+      // Disconnect calendar: clear user's calendar data
+      await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
+      await env.DB.prepare("DELETE FROM freebusy_blocks WHERE user_id = ?").bind(userId).run();
+      await env.DB.prepare("DELETE FROM daily_availability WHERE user_id = ?").bind(userId).run();
+
+      // Clear calendar credentials from users table
+      await env.DB.prepare(
+        `UPDATE users
+         SET calendar_id = NULL,
+             refresh_token_encrypted = NULL,
+             caldav_url = NULL,
+             caldav_username = NULL,
+             updated_at = ?
+         WHERE id = ?`
+      ).bind(new Date().toISOString(), userId).run();
+
+      // Recompute daily summaries in background since user's availability has changed
+      const timezone = env.HOUSE_TIMEZONE || DEFAULT_TIMEZONE;
+      const { dateStrings } = buildSyncWindow(timezone, HORIZON_DAYS);
+      if (dateStrings.length > 0) {
+        ctx.waitUntil(recomputeSummariesAfterLogout(env, dateStrings));
+      }
+    }
+  }
 
   const headers = new Headers();
   headers.set("Location", target);
   headers.append("Set-Cookie", buildExpiredSessionCookie(cookieOptions));
 
   return new Response(null, { status: 303, headers });
+}
+
+async function recomputeSummariesAfterLogout(env: Env, dateStrings: string[]): Promise<void> {
+  try {
+    const timestampIso = new Date().toISOString();
+    const startDate = dateStrings[0];
+    const endDate = dateStrings[dateStrings.length - 1];
+
+    const { results } = await env.DB.prepare(
+      `SELECT date, user_id, is_free_evening
+         FROM daily_availability
+        WHERE date BETWEEN ? AND ?`
+    )
+      .bind(startDate, endDate)
+      .all<{ date: string; user_id: string; is_free_evening: number }>();
+
+    const grouped = new Map<string, { freeCount: number; freeUsers: string[] }>();
+
+    for (const date of dateStrings) {
+      grouped.set(date, { freeCount: 0, freeUsers: [] });
+    }
+
+    if (results) {
+      for (const row of results) {
+        const entry = grouped.get(row.date);
+        if (!entry) continue;
+        if (row.is_free_evening === 1) {
+          entry.freeCount += 1;
+          entry.freeUsers.push(row.user_id);
+        }
+      }
+    }
+
+    await env.DB.prepare(
+      `DELETE FROM daily_summary WHERE date BETWEEN ? AND ?`
+    )
+      .bind(startDate, endDate)
+      .run();
+
+    for (const [date, stats] of grouped) {
+      await env.DB.prepare(
+        `INSERT INTO daily_summary (date, free_count, free_user_ids, computed_at)
+         VALUES (?, ?, ?, ?)`
+      )
+        .bind(date, stats.freeCount, JSON.stringify(stats.freeUsers), timestampIso)
+        .run();
+    }
+  } catch (error) {
+    console.error("Failed to recompute summaries after logout", error);
+  }
 }
 
 async function createUserSessionCookie(userId: string, env: Env, request: Request): Promise<string> {
@@ -311,7 +393,7 @@ export default {
 
 
     if (method === "POST" && url.pathname === "/household/logout") {
-      return handleHouseholdLogout(request, env);
+      return handleHouseholdLogout(request, env, ctx);
     }
 
     if (method === "GET" && url.pathname === "/api/availability") {
