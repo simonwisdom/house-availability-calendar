@@ -90,7 +90,7 @@ async function handleHouseholdLogout(request: Request, env: Env, ctx: ExecutionC
     if (userId) {
       // Disconnect calendar: clear user's calendar data
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
-      await env.DB.prepare("DELETE FROM freebusy_blocks WHERE user_id = ?").bind(userId).run();
+      await env.DB.prepare("DELETE FROM freebusy_windows WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM daily_availability WHERE user_id = ?").bind(userId).run();
 
       // Clear calendar credentials from users table
