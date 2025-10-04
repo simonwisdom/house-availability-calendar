@@ -88,10 +88,11 @@ async function handleHouseholdLogout(request: Request, env: Env, ctx: ExecutionC
   if (cookieValue) {
     const userId = await decryptUserId(cookieValue, env);
     if (userId) {
-      // Delete user and all their data
+      // Delete user and all their data (order matters for foreign keys)
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM freebusy_windows WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM daily_availability WHERE user_id = ?").bind(userId).run();
+      await env.DB.prepare("DELETE FROM sync_runs WHERE user_id = ?").bind(userId).run();
       await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
 
       // Recompute daily summaries in background since user's availability has changed
