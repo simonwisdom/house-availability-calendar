@@ -88,6 +88,67 @@
         flex-wrap: wrap;
       }
 
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        padding: 1rem;
+        overflow-y: auto;
+      }
+      .modal-content {
+        background: white;
+        border-radius: 12px;
+        max-width: 480px;
+        width: 100%;
+        max-height: calc(100vh - 2rem);
+        overflow-y: auto;
+        padding: 1.5rem;
+        margin: auto;
+      }
+      .modal-content h2 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.25rem;
+      }
+      .form-group {
+        margin-bottom: 1rem;
+      }
+      .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .form-input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 1rem;
+        box-sizing: border-box;
+      }
+      .modal-actions {
+        display: flex;
+        gap: 0.625rem;
+        justify-content: flex-end;
+      }
+
+      @media (max-width: 640px) {
+        .modal-content {
+          padding: 1.25rem;
+        }
+        .modal-content h2 {
+          font-size: 1.125rem;
+        }
+        .form-label {
+          font-size: 0.875rem;
+        }
+        .form-input {
+          padding: 0.625rem;
+          font-size: 0.9375rem;
+        }
+      }
+
       @media (prefers-color-scheme: dark) {
         .card {
           background: #1e293b;
@@ -108,6 +169,15 @@
         }
         #calendar-list {
           color: #94a3b8 !important;
+        }
+        .modal-content {
+          background: #1e293b;
+          color: #f1f5f9;
+        }
+        .form-input {
+          background: #334155;
+          border-color: #475569;
+          color: #f1f5f9;
         }
       }
     </style>
@@ -145,32 +215,29 @@
     </div>
 
     <!-- CalDAV form modal -->
-    <div id="caldav-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-      <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 480px; width: 90%;">
-        <h2 style="margin-top: 0;">Apple Calendar Setup</h2>
-        <p style="font-size: 0.9rem; color: #64748b;">You'll need an app-specific password from your iCloud settings.</p>
+    <div id="caldav-modal" class="modal-overlay" style="display: none; align-items: center; justify-content: center;">
+      <div class="modal-content">
+        <h2>Apple Calendar Setup</h2>
+        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem;">You'll need an app-specific password from your iCloud settings.</p>
         <a href="https://support.apple.com/en-us/102654" target="_blank" style="font-size: 0.85rem; color: #4285f4;">How to generate an app-specific password →</a>
 
-        <form id="caldav-form" style="margin-top: 1.5rem;">
-          <label style="display: block; margin-bottom: 1rem;">
-            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Your Name</span>
-            <input type="text" id="caldav-name" placeholder="John Doe" required
-              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
-          </label>
+        <form id="caldav-form" style="margin-top: 1.25rem;">
+          <div class="form-group">
+            <label class="form-label" for="caldav-name">Your Name</label>
+            <input type="text" id="caldav-name" class="form-input" placeholder="John Doe" required />
+          </div>
 
-          <label style="display: block; margin-bottom: 1rem;">
-            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Apple ID Email</span>
-            <input type="email" id="caldav-email" placeholder="your.email@gmail.com" required
-              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
-          </label>
+          <div class="form-group">
+            <label class="form-label" for="caldav-email">Apple ID Email</label>
+            <input type="email" id="caldav-email" class="form-input" placeholder="your.email@gmail.com" required />
+          </div>
 
-          <label style="display: block; margin-bottom: 1.5rem;">
-            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">App-Specific Password</span>
-            <input type="password" id="caldav-password" placeholder="xxxx-xxxx-xxxx-xxxx" required
-              style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem;" />
-          </label>
+          <div class="form-group">
+            <label class="form-label" for="caldav-password">App-Specific Password</label>
+            <input type="password" id="caldav-password" class="form-input" placeholder="xxxx-xxxx-xxxx-xxxx" required />
+          </div>
 
-          <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <div class="modal-actions">
             <button type="button" class="btn btn-secondary" id="cancel-caldav">Cancel</button>
             <button type="submit" class="btn btn-primary">Connect Calendar</button>
           </div>
