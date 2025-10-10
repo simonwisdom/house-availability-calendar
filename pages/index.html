@@ -280,10 +280,7 @@
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
       }
       .segment-tooltip {
-        position: absolute;
-        bottom: calc(100% + 0.5rem);
-        left: 50%;
-        transform: translateX(-50%);
+        position: fixed;
         min-width: 200px;
         max-width: 260px;
         background: #ffffff;
@@ -291,20 +288,28 @@
         box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
         border-radius: 10px;
         padding: 0.6rem 0.7rem;
-        z-index: 50;
+        z-index: 1000;
       }
       .segment-tooltip::before {
         content: "";
         position: absolute;
-        bottom: -6px;
         left: 50%;
         transform: translateX(-50%) rotate(45deg);
         width: 12px;
         height: 12px;
         background: inherit;
+      }
+      .segment-tooltip--above::before {
+        bottom: -6px;
         border-right: 1px solid rgba(15, 23, 42, 0.12);
         border-bottom: 1px solid rgba(15, 23, 42, 0.12);
-      }      .segment-tooltip-body {
+      }
+      .segment-tooltip--below::before {
+        top: -6px;
+        border-left: 1px solid rgba(15, 23, 42, 0.12);
+        border-top: 1px solid rgba(15, 23, 42, 0.12);
+      }
+      .segment-tooltip-body {
         font-size: 0.78rem;
         color: rgba(15, 23, 42, 0.75);
       }
@@ -845,10 +850,15 @@
           box-shadow: 0 20px 45px rgba(2, 6, 23, 0.55);
           color: rgba(226, 232, 240, 0.85);
         }
-        .segment-tooltip::before {
+        .segment-tooltip--above::before {
           border-right-color: rgba(148, 163, 184, 0.22);
           border-bottom-color: rgba(148, 163, 184, 0.22);
-        }        .segment-tooltip-secondary {
+        }
+        .segment-tooltip--below::before {
+          border-left-color: rgba(148, 163, 184, 0.22);
+          border-top-color: rgba(148, 163, 184, 0.22);
+        }
+        .segment-tooltip-secondary {
           display: none;
         }
       }
@@ -1036,16 +1046,18 @@
       }
 
       function closeSegmentTooltip() {
-        if (activeSegmentTooltip && activeSegmentTooltip.parentElement) {
-          activeSegmentTooltip.parentElement.removeChild(activeSegmentTooltip);
+        if (activeSegmentTooltip) {
+          if (activeSegmentTooltip.parentElement) {
+            activeSegmentTooltip.parentElement.removeChild(activeSegmentTooltip);
+          }
+          activeSegmentTooltip = null;
         }
         if (activeSegmentTrigger) {
           activeSegmentTrigger.classList.remove('tooltip-open');
           activeSegmentTrigger.setAttribute('aria-expanded', 'false');
           activeSegmentTrigger.removeAttribute('aria-describedby');
+          activeSegmentTrigger = null;
         }
-        activeSegmentTooltip = null;
-        activeSegmentTrigger = null;
       }
 
       function getUserIdentity(userId) {
@@ -1055,6 +1067,40 @@
         const primary = displayName || email || userId;
         const displayLabel = primary.split(' ')[0];
         return { primary, displayLabel };
+      }
+
+      function positionSegmentTooltip(triggerEl, tooltip) {
+        if (!(triggerEl instanceof HTMLElement) || !(tooltip instanceof HTMLElement)) return;
+
+        const triggerRect = triggerEl.getBoundingClientRect();
+        const viewportPadding = 12;
+        const viewportHeight = window.innerHeight;
+        const offset = 8; // Gap between trigger and tooltip
+
+        // Initially position below to measure
+        tooltip.classList.remove('segment-tooltip--above');
+        tooltip.classList.add('segment-tooltip--below');
+
+        // Position at trigger location
+        tooltip.style.left = `${triggerRect.left + triggerRect.width / 2}px`;
+        tooltip.style.transform = 'translateX(-50%)';
+        tooltip.style.top = `${triggerRect.bottom + offset}px`;
+
+        requestAnimationFrame(() => {
+          if (tooltip !== activeSegmentTooltip) return;
+          if (!tooltip.isConnected) return;
+
+          const tooltipRect = tooltip.getBoundingClientRect();
+          const spaceBelow = viewportHeight - triggerRect.bottom;
+          const tooltipHeight = tooltipRect.height;
+
+          // Check if tooltip extends beyond viewport or if there's not enough space below
+          if (tooltipRect.bottom > viewportHeight - viewportPadding || spaceBelow < tooltipHeight + offset + 20) {
+            tooltip.classList.remove('segment-tooltip--below');
+            tooltip.classList.add('segment-tooltip--above');
+            tooltip.style.top = `${triggerRect.top - tooltipHeight - offset}px`;
+          }
+        });
       }
 
       function showSegmentTooltip(triggerEl) {
@@ -1074,7 +1120,7 @@
         const userIds = (triggerEl.dataset.userIds || '').split(',').filter(Boolean);
         const isPlaceholder = triggerEl.dataset.placeholder === 'true';
         const tooltip = document.createElement('div');
-        tooltip.className = 'segment-tooltip';
+        tooltip.className = 'segment-tooltip segment-tooltip--below';
         tooltip.setAttribute('role', 'tooltip');
         const tooltipId = `segment-tooltip-${++segmentTooltipId}`;
         tooltip.id = tooltipId;
@@ -1111,13 +1157,15 @@
         tooltip.append(body);
         tooltip.addEventListener('click', (event) => event.stopPropagation());
 
-        triggerEl.appendChild(tooltip);
+        document.body.appendChild(tooltip);
         triggerEl.classList.add('tooltip-open');
         triggerEl.setAttribute('aria-expanded', 'true');
         triggerEl.setAttribute('aria-describedby', tooltipId);
 
         activeSegmentTooltip = tooltip;
         activeSegmentTrigger = triggerEl;
+
+        positionSegmentTooltip(triggerEl, tooltip);
       }
 
       function handleSegmentClick(event) {
