@@ -347,13 +347,7 @@
         display: none;
       }
       #legend {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 1rem;
-        font-size: 0.85rem;
-        color: rgba(15, 23, 42, 0.7);
-        align-items: center;
-        flex-shrink: 0;
+        display: none;
       }
       .legend-item {
         display: flex;
@@ -1027,13 +1021,13 @@
 
       const palette = [
         "#F1F5F9",
-        "#D9E8FB",
-        "#BED7F6",
-        "#94BFF0",
-        "#6DA5E8",
-        "#4B89D9",
-        "#306CC6",
-        "#1B4DA0"
+        "#DCFCE7",
+        "#BBF7D0",
+        "#86EFAC",
+        "#4ADE80",
+        "#22C55E",
+        "#16A34A",
+        "#15803D"
       ];
       const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
       const segmentOrder = ["morning", "evening"];
@@ -1725,6 +1719,19 @@
               const treatAsAvailable = rawSegmentCount > 0 && !isPastDay && !isPlaceholder;
               if (treatAsAvailable) {
                 segmentEl.classList.add("segment-available");
+
+                // Apply color gradient on all views
+                if (segmentScaleMax > 0) {
+                  const colorIndex = Math.round((rawSegmentCount / segmentScaleMax) * (palette.length - 1));
+                  const bgColor = palette[Math.min(colorIndex, palette.length - 1)];
+                  segmentEl.style.backgroundColor = bgColor;
+
+                  // Adjust text color based on background brightness
+                  const isDark = colorIndex >= 5; // Green palette gets darker after index 5
+                  if (isDark) {
+                    segmentEl.style.color = '#ffffff';
+                  }
+                }
               } else {
                 segmentEl.classList.add("segment-empty");
               }
