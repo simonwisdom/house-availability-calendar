@@ -332,24 +332,10 @@ function buildExpiredSessionCookie(options: CookieOptions): string {
 function getCookieOptions(request: Request, env: Env): CookieOptions {
   const requestUrl = new URL(request.url);
   const isSecure = requestUrl.protocol === "https:";
-  const appBaseUrl = parseUrl(env.APP_BASE_URL);
-  const crossSite = shouldUseSameSiteNone(requestUrl, appBaseUrl);
-  const sameSite: CookieOptions["sameSite"] = isSecure && crossSite ? "None" : "Lax";
+  // Use SameSite=None for secure contexts so cross-origin frontend assets can call the API.
+  // HTTPS is required for None so fall back to Lax for local HTTP development.
+  const sameSite: CookieOptions["sameSite"] = isSecure ? "None" : "Lax";
   return { isSecure, sameSite };
-}
-
-function shouldUseSameSiteNone(requestUrl: URL, appBaseUrl?: URL): boolean {
-  if (!appBaseUrl) return false;
-  return appBaseUrl.origin !== requestUrl.origin;
-}
-
-function parseUrl(value: string | undefined): URL | undefined {
-  if (!value) return undefined;
-  try {
-    return new URL(value);
-  } catch {
-    return undefined;
-  }
 }
 
 function sanitizeNextParam(value: FormDataEntryValue | string | null | undefined): string | undefined {
@@ -654,9 +640,14 @@ function handleGoogleStart(env: Env): Response {
 async function handleManualSync(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    const userId = typeof body.userId === "string" ? (body.userId as string).trim() : "";
+    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+
     if (!userId) {
-      return jsonWithCors({ ok: false, error: "missing_user_id" }, request, 400);
+      const session = await ensureSession(request, env, "api");
+      if (!session.authorized) {
+        return session.response;
+      }
+      userId = session.userId;
     }
 
     const user = await env.DB.prepare(

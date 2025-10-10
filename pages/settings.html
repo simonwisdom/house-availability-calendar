@@ -75,6 +75,10 @@
       .btn-secondary:hover {
         background: #cbd5e1;
       }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
       .btn-danger {
         background: rgba(220, 38, 38, 0.1);
         color: #dc2626;
@@ -86,6 +90,21 @@
         display: flex;
         gap: 0.75rem;
         flex-wrap: wrap;
+      }
+      .status-text {
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        min-height: 1.25rem;
+        color: #64748b;
+      }
+      .status-text.status-success {
+        color: #15803d;
+      }
+      .status-text.status-error {
+        color: #dc2626;
+      }
+      .status-text.status-info {
+        color: #2563eb;
       }
 
       .modal-overlay {
@@ -164,6 +183,18 @@
         .btn-secondary:hover {
           background: #475569;
         }
+        .status-text {
+          color: #94a3b8;
+        }
+        .status-text.status-success {
+          color: #22c55e;
+        }
+        .status-text.status-error {
+          color: #f87171;
+        }
+        .status-text.status-info {
+          color: #60a5fa;
+        }
         #synced-calendars p {
           color: #f1f5f9 !important;
         }
@@ -201,6 +232,15 @@
           <a href="/auth/outlook/start" class="btn btn-primary" id="reconnect-outlook">Reconnect Outlook Calendar</a>
           <button class="btn btn-primary" id="reconnect-apple">Reconnect Apple Calendar</button>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>Availability Data</h2>
+        <p>Trigger a manual availability sync when the schedule looks out of date.</p>
+        <div class="actions">
+          <button class="btn btn-secondary" id="manual-sync-button">Resync Availability</button>
+        </div>
+        <p id="manual-sync-status" class="status-text" role="status" aria-live="polite"></p>
       </div>
 
       <div class="card">
@@ -319,6 +359,49 @@
         } catch (error) {
           console.error('CalDAV setup error:', error);
           alert('Failed to connect. Please check your credentials and try again.');
+        }
+      });
+
+      const manualSyncButton = document.getElementById('manual-sync-button');
+      const manualSyncStatus = document.getElementById('manual-sync-status');
+
+      function updateManualSyncStatus(message, variant = 'info') {
+        if (!manualSyncStatus) return;
+        manualSyncStatus.textContent = message;
+        manualSyncStatus.classList.remove('status-info', 'status-success', 'status-error');
+        manualSyncStatus.classList.add(`status-${variant}`);
+      }
+
+      manualSyncButton?.addEventListener('click', async () => {
+        if (!manualSyncButton) return;
+
+        const originalLabel = manualSyncButton.textContent || 'Resync Availability';
+        manualSyncButton.disabled = true;
+        manualSyncButton.textContent = 'Syncing…';
+        updateManualSyncStatus('Starting sync…', 'info');
+
+        try {
+          const response = await fetch(`${workerOrigin}/api/manual-sync`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({})
+          });
+
+          const result = await response.json().catch(() => ({}));
+
+          if (response.ok && result.ok) {
+            updateManualSyncStatus('Sync queued. Check back in a moment for refreshed availability.', 'success');
+          } else {
+            const message = result.error || 'Unable to trigger sync. Please try again.';
+            updateManualSyncStatus(message, 'error');
+          }
+        } catch (error) {
+          console.error('Manual sync failed:', error);
+          updateManualSyncStatus('Request failed. Check your connection and try again.', 'error');
+        } finally {
+          manualSyncButton.disabled = false;
+          manualSyncButton.textContent = originalLabel;
         }
       });
 
