@@ -245,6 +245,18 @@
         font-weight: 600;
         color: inherit;
       }
+      .initials-container {
+        display: none;
+      }
+      .initials-circle {
+        display: none;
+      }
+      .overflow-indicator {
+        display: none;
+      }
+      .empty-indicator {
+        display: none;
+      }
       .segment-available {
         background: rgba(74, 222, 128, 0.18);
         border-color: rgba(34, 197, 94, 0.35);
@@ -653,6 +665,44 @@
           font-size: 0.9rem;
           font-weight: 700;
         }
+        .initials-container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.15rem;
+          justify-content: flex-start;
+          align-items: flex-start;
+          align-content: flex-start;
+          min-height: auto;
+          width: 100%;
+        }
+        .initials-circle {
+          display: inline-flex;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.5rem;
+          font-weight: 700;
+          color: white;
+          text-transform: uppercase;
+          letter-spacing: -0.02em;
+          flex-shrink: 0;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+          border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .overflow-indicator {
+          display: inline-flex;
+          background: rgba(100, 116, 139, 0.85) !important;
+          font-size: 0.48rem;
+        }
+        .empty-indicator {
+          display: block;
+          font-size: 0.85rem;
+          color: rgba(15, 23, 42, 0.35);
+          font-weight: 400;
+          text-align: center;
+        }
         .date {
           display: none;
         }
@@ -861,6 +911,15 @@
         .segment-tooltip-secondary {
           display: none;
         }
+        .empty-indicator {
+          color: rgba(148, 163, 184, 0.5);
+        }
+        .overflow-indicator {
+          background: rgba(71, 85, 105, 0.95) !important;
+        }
+        .initials-circle {
+          border-color: rgba(255, 255, 255, 0.25);
+        }
       }
 
       @media (min-width: 769px) {
@@ -1067,6 +1126,50 @@
         const primary = displayName || email || userId;
         const displayLabel = primary.split(' ')[0];
         return { primary, displayLabel };
+      }
+
+      function getUserInitials(userId) {
+        const entry = availabilityUsers?.[userId];
+        const displayName = entry?.displayName?.trim() || '';
+        const email = entry?.email || '';
+
+        if (displayName) {
+          // Extract first letter of first name and last name
+          const parts = displayName.split(/\s+/);
+          if (parts.length >= 2) {
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+          }
+          // Single name: use first 2 letters
+          return displayName.substring(0, 2).toUpperCase();
+        }
+
+        // Fallback to email prefix
+        if (email) {
+          const prefix = email.split('@')[0];
+          return prefix.substring(0, 2).toUpperCase();
+        }
+
+        // Last resort: use userId
+        return userId.substring(0, 2).toUpperCase();
+      }
+
+      function getUserColor(userId) {
+        // Generate consistent color from userId hash
+        const colorPalette = [
+          '#4B89D9', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6',
+          '#06b6d4', '#ef4444', '#10b981', '#f97316', '#a855f7',
+          '#14b8a6', '#6366f1', '#84cc16', '#f43f5e', '#0ea5e9'
+        ];
+
+        // Simple hash function
+        let hash = 0;
+        for (let i = 0; i < userId.length; i++) {
+          hash = ((hash << 5) - hash) + userId.charCodeAt(i);
+          hash = hash & hash; // Convert to 32-bit integer
+        }
+
+        const index = Math.abs(hash) % colorPalette.length;
+        return colorPalette[index];
       }
 
       function positionSegmentTooltip(triggerEl, tooltip) {
@@ -1553,12 +1656,56 @@
               segmentLabel.className = "segment-label";
               segmentLabel.textContent = segmentLabels[segmentKey];
 
-              const segmentCount = document.createElement("div");
-              segmentCount.className = "segment-count";
-              const rawSegmentCount = segmentData.freeCount ?? 0;
-              segmentCount.textContent = formatAvailabilityDisplay(rawSegmentCount, mobileLayout);
-
               const freeUserIds = Array.isArray(segmentData.freeUserIds) ? segmentData.freeUserIds : [];
+              const rawSegmentCount = segmentData.freeCount ?? 0;
+
+              // Create content container - either initials (mobile) or count (desktop)
+              let contentEl;
+
+              if (mobileLayout) {
+                // Mobile: show initials circles
+                const initialsContainer = document.createElement("div");
+                initialsContainer.className = "initials-container";
+
+                if (rawSegmentCount > 0 && !isPlaceholder && !isPastDay) {
+                  const maxVisible = 7;
+                  const visibleUsers = freeUserIds.slice(0, maxVisible);
+                  const overflowCount = Math.max(0, freeUserIds.length - maxVisible);
+
+                  // Create circles for visible users
+                  visibleUsers.forEach(userId => {
+                    const circle = document.createElement("div");
+                    circle.className = "initials-circle";
+                    circle.textContent = getUserInitials(userId);
+                    circle.style.backgroundColor = getUserColor(userId);
+                    circle.title = getUserIdentity(userId).primary;
+                    initialsContainer.appendChild(circle);
+                  });
+
+                  // Add overflow indicator if needed
+                  if (overflowCount > 0) {
+                    const overflow = document.createElement("div");
+                    overflow.className = "initials-circle overflow-indicator";
+                    overflow.textContent = `+${overflowCount}`;
+                    overflow.title = `${overflowCount} more`;
+                    initialsContainer.appendChild(overflow);
+                  }
+                } else {
+                  // Empty state: show dash
+                  const emptyIndicator = document.createElement("div");
+                  emptyIndicator.className = "empty-indicator";
+                  emptyIndicator.textContent = "—";
+                  initialsContainer.appendChild(emptyIndicator);
+                }
+                contentEl = initialsContainer;
+              } else {
+                // Desktop: show count number
+                const segmentCount = document.createElement("div");
+                segmentCount.className = "segment-count";
+                segmentCount.textContent = formatAvailabilityDisplay(rawSegmentCount, false);
+                contentEl = segmentCount;
+              }
+
               segmentEl.dataset.userIds = freeUserIds.join(',');
               segmentEl.dataset.date = dayData.date;
               segmentEl.dataset.segmentKey = segmentKey;
@@ -1586,7 +1733,7 @@
               segmentEl.title = tooltipText;
               segmentEl.setAttribute("aria-label", tooltipText);
 
-              segmentEl.append(segmentLabel, segmentCount);
+              segmentEl.append(segmentLabel, contentEl);
               segmentWrap.appendChild(segmentEl);
             });
 
