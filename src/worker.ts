@@ -7,16 +7,27 @@ import {
 import { detectCalDAVServer } from "./providers/caldav";
 import { performFreeBusySync, buildSyncWindow, DEFAULT_TIMEZONE, HORIZON_DAYS } from "./freebusy";
 
+type DaySegmentKey = "morning" | "evening";
+
+const SEGMENT_KEYS: DaySegmentKey[] = ["morning", "evening"];
+
+type SegmentAvailability = {
+  freeCount: number;
+  freeUserIds?: string[];
+};
+
 type AvailabilityCell = {
   date: string;
   freeCount: number;
   freeUserIds?: string[];
+  segments: Record<DaySegmentKey, SegmentAvailability>;
 };
 
 type AvailabilityResponse = {
   timezone: string;
   days: AvailabilityCell[];
   lastUpdatedIso?: string;
+  users?: Record<string, { email: string; displayName?: string | null }>;
 };
 
 const SESSION_COOKIE_NAME = "user_session";
@@ -118,26 +129,40 @@ async function recomputeSummariesAfterLogout(env: Env, dateStrings: string[]): P
     const endDate = dateStrings[dateStrings.length - 1];
 
     const { results } = await env.DB.prepare(
-      `SELECT date, user_id, is_free_evening
+      `SELECT date, user_id, is_free_evening, is_free_morning
          FROM daily_availability
         WHERE date BETWEEN ? AND ?`
     )
       .bind(startDate, endDate)
-      .all<{ date: string; user_id: string; is_free_evening: number }>();
+      .all<{ date: string; user_id: string; is_free_evening: number; is_free_morning: number }>();
 
-    const grouped = new Map<string, { freeCount: number; freeUsers: string[] }>();
+    const grouped = new Map<
+      string,
+      {
+        segments: Record<DaySegmentKey, { freeUsers: string[] }>;
+      }
+    >();
 
     for (const date of dateStrings) {
-      grouped.set(date, { freeCount: 0, freeUsers: [] });
+      grouped.set(date, {
+        segments: SEGMENT_KEYS.reduce((acc, key) => {
+          acc[key] = { freeUsers: [] };
+          return acc;
+        }, {} as Record<DaySegmentKey, { freeUsers: string[] }>),
+      });
     }
 
     if (results) {
       for (const row of results) {
         const entry = grouped.get(row.date);
         if (!entry) continue;
+
+        if (row.is_free_morning === 1) {
+          entry.segments.morning.freeUsers.push(row.user_id);
+        }
+
         if (row.is_free_evening === 1) {
-          entry.freeCount += 1;
-          entry.freeUsers.push(row.user_id);
+          entry.segments.evening.freeUsers.push(row.user_id);
         }
       }
     }
@@ -149,11 +174,32 @@ async function recomputeSummariesAfterLogout(env: Env, dateStrings: string[]): P
       .run();
 
     for (const [date, stats] of grouped) {
+      const morning = stats.segments.morning;
+      const evening = stats.segments.evening;
+      const mergedIds = new Set<string>([...morning.freeUsers, ...evening.freeUsers]);
       await env.DB.prepare(
-        `INSERT INTO daily_summary (date, free_count, free_user_ids, computed_at)
-         VALUES (?, ?, ?, ?)`
+        `INSERT INTO daily_summary (
+           date,
+           free_count,
+           free_user_ids,
+           computed_at,
+           free_count_morning,
+           free_user_ids_morning,
+           free_count_evening,
+           free_user_ids_evening
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
-        .bind(date, stats.freeCount, JSON.stringify(stats.freeUsers), timestampIso)
+        .bind(
+          date,
+          mergedIds.size,
+          JSON.stringify(Array.from(mergedIds)),
+          timestampIso,
+          morning.freeUsers.length,
+          JSON.stringify(morning.freeUsers),
+          evening.freeUsers.length,
+          JSON.stringify(evening.freeUsers)
+        )
         .run();
     }
   } catch (error) {
@@ -456,22 +502,73 @@ async function handleAvailability(env: Env, request: Request): Promise<Response>
   const endDate = dateStrings[dateStrings.length - 1];
 
   const { results } = await env.DB.prepare(
-    `SELECT date, free_count, free_user_ids, computed_at
+    `SELECT date,
+            free_count,
+            free_user_ids,
+            free_count_morning,
+            free_user_ids_morning,
+            free_count_evening,
+            free_user_ids_evening,
+            computed_at
        FROM daily_summary
       WHERE date BETWEEN ? AND ?`
   )
     .bind(startDate, endDate)
-    .all<{ date: string; free_count: number; free_user_ids: string | null; computed_at: string }>();
+    .all<{
+      date: string;
+      free_count: number;
+      free_user_ids: string | null;
+      free_count_morning: number | null;
+      free_user_ids_morning: string | null;
+      free_count_evening: number | null;
+      free_user_ids_evening: string | null;
+      computed_at: string;
+    }>();
 
-  const map = new Map<string, { freeCount: number; freeUserIds: string[]; computedAt: string }>();
+  const map = new Map<
+    string,
+    {
+      freeCount: number;
+      freeUserIds: string[];
+      segments: Record<DaySegmentKey, SegmentAvailability>;
+      computedAt: string;
+    }
+  >();
   let latest: string | undefined;
+  const referencedUserIds = new Set<string>();
 
   if (results) {
     for (const row of results) {
-      const freeUserIds = parseJsonArray(row.free_user_ids);
+      const morningIds = parseJsonArray(row.free_user_ids_morning);
+      const eveningIds = parseJsonArray(row.free_user_ids_evening);
+      const legacyIds = parseJsonArray(row.free_user_ids);
+
+      const mergedIds = new Set<string>();
+      for (const id of [...morningIds, ...eveningIds, ...legacyIds]) {
+        mergedIds.add(id);
+        if (id) referencedUserIds.add(id);
+      }
+
+      const segments: Record<DaySegmentKey, SegmentAvailability> = {
+        morning: {
+          freeCount: row.free_count_morning ?? morningIds.length,
+          freeUserIds: morningIds,
+        },
+        evening: {
+          freeCount: row.free_count_evening ?? eveningIds.length,
+          freeUserIds: eveningIds,
+        },
+      };
+
+      const freeCount =
+        typeof row.free_count === "number" && row.free_count >= mergedIds.size
+          ? row.free_count
+          : mergedIds.size;
+
       map.set(row.date, {
-        freeCount: row.free_count ?? 0,
-        freeUserIds,
+        freeCount,
+        freeUserIds: Array.from(mergedIds),
+        segments,
         computedAt: row.computed_at,
       });
       if (!latest || row.computed_at > latest) {
@@ -486,13 +583,42 @@ async function handleAvailability(env: Env, request: Request): Promise<Response>
       date,
       freeCount: entry?.freeCount ?? 0,
       freeUserIds: entry?.freeUserIds,
+      segments:
+        entry?.segments ?? {
+          morning: { freeCount: 0 },
+          evening: { freeCount: 0 },
+        },
     };
   });
+
+  const userDirectory: Record<string, { email: string; displayName?: string | null }> = {};
+
+  if (referencedUserIds.size > 0) {
+    const ids = Array.from(referencedUserIds);
+    const placeholders = ids.map(() => "?").join(",");
+    const query = `SELECT id, email, display_name as displayName FROM users WHERE id IN (${placeholders})`;
+    try {
+      const { results } = await env.DB.prepare(query)
+        .bind(...ids)
+        .all<{ id: string; email: string; displayName: string | null }>();
+
+      results?.forEach((row) => {
+        if (!row || !row.id) return;
+        userDirectory[row.id] = {
+          email: row.email,
+          displayName: row.displayName,
+        };
+      });
+    } catch (error) {
+      console.error("Failed to load user directory for availability response", error);
+    }
+  }
 
   const payload: AvailabilityResponse = {
     timezone,
     days,
     lastUpdatedIso: latest,
+    users: userDirectory,
   };
 
   return jsonWithCors(payload, request);

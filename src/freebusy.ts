@@ -5,6 +5,15 @@ import { createProvider, type BusyWindow, type CalendarProviderType, type UserCr
 export const DEFAULT_TIMEZONE = "Europe/London";
 export const HORIZON_DAYS = 28;
 
+const SEGMENT_DEFINITIONS = {
+  morning: { start: "09:00:00", end: "12:00:00" },
+  evening: { start: "18:00:00", end: "22:00:00" },
+} as const;
+
+type DaySegmentKey = keyof typeof SEGMENT_DEFINITIONS;
+
+const SEGMENT_KEYS = Object.keys(SEGMENT_DEFINITIONS) as DaySegmentKey[];
+
 export type UserSyncContext = {
   id: string;
   provider: CalendarProviderType;
@@ -214,11 +223,13 @@ async function updateAvailability(
     .run();
 
   const availabilityStatements = dateStrings.map((date) => {
-    const isFree = isEveningFree(windows, date, timezone) ? 1 : 0;
+    const segmentFlags = computeSegmentFlags(windows, date, timezone);
+    const isMorningFree = segmentFlags.morning ? 1 : 0;
+    const isEveningFree = segmentFlags.evening ? 1 : 0;
     return env.DB.prepare(
-      `INSERT INTO daily_availability (date, user_id, is_free_evening, computed_at)
-       VALUES (?, ?, ?, ?)`
-    ).bind(date, userId, isFree, timestampIso);
+      `INSERT INTO daily_availability (date, user_id, is_free_evening, computed_at, is_free_morning)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(date, userId, isEveningFree, timestampIso, isMorningFree);
   });
 
   if (availabilityStatements.length > 0) {
@@ -228,11 +239,29 @@ async function updateAvailability(
   await recomputeDailySummaries(env, dateStrings, timestampIso);
 }
 
-function isEveningFree(windows: BusyWindow[], date: string, timezone: string): boolean {
+function computeSegmentFlags(
+  windows: BusyWindow[],
+  date: string,
+  timezone: string
+): Record<DaySegmentKey, boolean> {
+  const flags: Record<DaySegmentKey, boolean> = {} as Record<DaySegmentKey, boolean>;
+  for (const key of SEGMENT_KEYS) {
+    flags[key] = isSegmentFree(windows, date, timezone, key);
+  }
+  return flags;
+}
+
+function isSegmentFree(
+  windows: BusyWindow[],
+  date: string,
+  timezone: string,
+  segment: DaySegmentKey
+): boolean {
   if (windows.length === 0) return true;
 
-  const eveningStart = zonedTimeToUtc(`${date}T18:00:00`, timezone).getTime();
-  const eveningEnd = zonedTimeToUtc(`${date}T22:00:00`, timezone).getTime();
+  const { start, end } = SEGMENT_DEFINITIONS[segment];
+  const segmentStart = zonedTimeToUtc(`${date}T${start}`, timezone).getTime();
+  const segmentEnd = zonedTimeToUtc(`${date}T${end}`, timezone).getTime();
 
   for (const window of windows) {
     const startMs = Date.parse(window.start);
@@ -242,7 +271,7 @@ function isEveningFree(windows: BusyWindow[], date: string, timezone: string): b
       return false;
     }
 
-    if (endMs > eveningStart && startMs < eveningEnd) {
+    if (endMs > segmentStart && startMs < segmentEnd) {
       return false;
     }
   }
@@ -255,26 +284,44 @@ async function recomputeDailySummaries(env: Env, dateStrings: string[], timestam
   const endDate = dateStrings[dateStrings.length - 1];
 
   const { results } = await env.DB.prepare(
-    `SELECT date, user_id, is_free_evening
+    `SELECT date, user_id, is_free_evening, is_free_morning
        FROM daily_availability
       WHERE date BETWEEN ? AND ?`
   )
     .bind(startDate, endDate)
-    .all<{ date: string; user_id: string; is_free_evening: number }>();
+    .all<{ date: string; user_id: string; is_free_evening: number; is_free_morning: number }>();
 
-  const grouped = new Map<string, { freeCount: number; freeUsers: string[] }>();
+  const grouped = new Map<
+    string,
+    {
+      segments: Record<DaySegmentKey, { freeCount: number; freeUsers: string[] }>;
+    }
+  >();
 
   for (const date of dateStrings) {
-    grouped.set(date, { freeCount: 0, freeUsers: [] });
+    grouped.set(date, {
+      segments: SEGMENT_KEYS.reduce((acc, key) => {
+        acc[key] = { freeCount: 0, freeUsers: [] };
+        return acc;
+      }, {} as Record<DaySegmentKey, { freeCount: number; freeUsers: string[] }>),
+    });
   }
 
   if (results) {
     for (const row of results) {
       const entry = grouped.get(row.date);
       if (!entry) continue;
+
+      if (row.is_free_morning === 1) {
+        const segment = entry.segments.morning;
+        segment.freeCount += 1;
+        segment.freeUsers.push(row.user_id);
+      }
+
       if (row.is_free_evening === 1) {
-        entry.freeCount += 1;
-        entry.freeUsers.push(row.user_id);
+        const segment = entry.segments.evening;
+        segment.freeCount += 1;
+        segment.freeUsers.push(row.user_id);
       }
     }
   }
@@ -287,12 +334,34 @@ async function recomputeDailySummaries(env: Env, dateStrings: string[], timestam
     .run();
 
   const summaryStatements = dateStrings.map((date) => {
-    const entry = grouped.get(date) ?? { freeCount: 0, freeUsers: [] };
-    const payload = entry.freeUsers;
+    const entry = grouped.get(date);
+    const morning = entry?.segments.morning ?? { freeCount: 0, freeUsers: [] };
+    const evening = entry?.segments.evening ?? { freeCount: 0, freeUsers: [] };
+    const mergedIds = new Set<string>([...morning.freeUsers, ...evening.freeUsers]);
+    const combinedList = Array.from(mergedIds);
+
     return env.DB.prepare(
-      `INSERT INTO daily_summary (date, free_count, free_user_ids, computed_at)
-       VALUES (?, ?, ?, ?)`
-    ).bind(date, entry.freeCount, JSON.stringify(payload), timestampIso);
+      `INSERT INTO daily_summary (
+         date,
+         free_count,
+         free_user_ids,
+         computed_at,
+         free_count_morning,
+         free_user_ids_morning,
+         free_count_evening,
+         free_user_ids_evening
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      date,
+      combinedList.length,
+      JSON.stringify(combinedList),
+      timestampIso,
+      morning.freeCount,
+      JSON.stringify(morning.freeUsers),
+      evening.freeCount,
+      JSON.stringify(evening.freeUsers)
+    );
   });
 
   if (summaryStatements.length > 0) {

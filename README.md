@@ -1,12 +1,12 @@
 # House Availability App
 
-A Cloudflare-based heat map showing when housemates are free for house events. The app aggregates calendar data from Google Calendar, Outlook Calendar, and Apple Calendar (via CalDAV) to show evening availability (6-10pm) across the household.
+A Cloudflare-based heat map showing when housemates are free for house events. The app aggregates calendar data from Google Calendar, Outlook Calendar, and Apple Calendar (via CalDAV) to show morning (9am–12pm) and evening (6–10pm) availability across the household.
 
 ## What It Does
 
 - Connects to Google Calendar, Outlook Calendar, or Apple Calendar for each housemate
 - Syncs calendar data nightly via Cloudflare Cron Triggers
-- Computes who is free between 6-10pm each evening
+- Computes who is free during the morning (9am–12pm) and evening (6–10pm) windows each day
 - Displays a rolling 4-week heat map showing availability counts
 - Mobile-friendly with week-by-week navigation
 - Supports multiple calendars per user
@@ -192,16 +192,16 @@ npm run deploy
 1. **Authentication**: Users connect their calendar (Google or Apple)
 2. **Initial Sync**: App fetches free/busy data for the next 28 days
 3. **Nightly Updates**: Cron trigger (5:00 UTC) refreshes all user calendars
-4. **Availability Calculation**: For each day, determines if 6-10pm window is free
-5. **Aggregation**: Counts how many users are free each evening
+4. **Availability Calculation**: For each day, determines if the 9am–12pm and 6–10pm windows are free
+5. **Aggregation**: Counts how many users are free in each window and merges them for daily totals
 6. **Display**: Heat map shows aggregated counts with color gradient
 
 ### Database Schema
 - `users` - User accounts with provider info and encrypted tokens
 - `user_calendars` - Selected calendars per user (supports multi-calendar)
 - `freebusy_windows` - Raw busy time blocks from calendar providers
-- `daily_availability` - Per-user evening availability flags
-- `daily_summary` - Aggregated daily counts (what the UI displays)
+- `daily_availability` - Per-user morning and evening availability flags
+- `daily_summary` - Aggregated daily totals plus per-window counts (what the UI displays)
 - `sync_runs` - Sync job history and error tracking
 
 ### Privacy & Security

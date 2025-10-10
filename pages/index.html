@@ -100,7 +100,7 @@
         gap: 8px;
         align-items: start;
         flex: 1;
-        overflow-y: auto;
+        overflow: visible;
         min-height: 0;
         align-content: start;
       }
@@ -138,44 +138,196 @@
       }
       .cell {
         width: 100%;
-        aspect-ratio: 1 / 1;
         border-radius: 12px;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: #e2e8f0;
+        align-items: stretch;
+        justify-content: space-between;
+        background: #ffffff;
         color: #0f172a;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.04);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        padding: 0.6rem 0.55rem;
         min-height: 0;
         min-width: 0;
+        position: relative;
+        overflow: visible;
+        box-sizing: border-box;
       }
       .cell:hover {
         transform: translateY(-2px);
-        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.1), 0 8px 18px rgba(15, 23, 42, 0.12);
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
       }
       .cell.weekend {
         opacity: 0.92;
-      }
-      .cell.today {
-        box-shadow: inset 0 0 0 2px #f97316, 0 6px 14px rgba(249, 115, 22, 0.25);
-      }
-      .cell.peak:not(.today) {
-        box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.35);
       }
       .cell.empty {
         background: transparent;
         box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
         opacity: 0.4;
       }
+      .cell.placeholder,
+      .cell.past-day {
+        background: rgba(226, 232, 240, 0.6);
+        border-color: rgba(148, 163, 184, 0.4);
+        box-shadow: none;
+        color: rgba(71, 85, 105, 0.85);
+      }
+      .cell.past-day .day-name,
+      .cell.placeholder .day-name {
+        color: rgba(100, 116, 139, 0.85);
+      }
       .count {
-        font-size: 1.6rem;
-        font-weight: 600;
+        display: none;
       }
       .date {
+        font-size: 0.72rem;
+        opacity: 0.6;
+        margin-top: 0.45rem;
+        text-align: center;
+      }
+      .segment-wrap {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        width: 100%;
+        flex: 1;
+        box-sizing: border-box;
+      }
+      .segment-wrap::before {
+        content: "";
+        position: absolute;
+        top: 10%;
+        bottom: 10%;
+        left: 50%;
+        width: 1px;
+        background: rgba(148, 163, 184, 0.5);
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+      .segment {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.35rem 0.25rem;
+        border-radius: 0;
+        border: 1px solid transparent;
+        background: rgba(148, 163, 184, 0.18);
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        cursor: pointer;
+        position: relative;
+        height: 100%;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .segment:first-child {
+        border-top-left-radius: 10px;
+        border-bottom-left-radius: 10px;
+      }
+      .segment:last-child {
+        border-top-right-radius: 10px;
+        border-bottom-right-radius: 10px;
+        border-left: 1px solid rgba(148, 163, 184, 0.3);
+      }
+      .segment-label {
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.78;
+      }
+      .segment-count {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: inherit;
+      }
+      .segment-available {
+        background: rgba(74, 222, 128, 0.18);
+        border-color: rgba(34, 197, 94, 0.35);
+        color: #166534;
+      }
+      .segment-available .segment-label {
+        opacity: 0.85;
+      }
+      .segment-empty {
+        background: rgba(148, 163, 184, 0.16);
+        border-color: rgba(148, 163, 184, 0.3);
+        color: rgba(15, 23, 42, 0.65);
+      }
+      .segment-empty .segment-label {
+        opacity: 0.7;
+      }
+      .cell.placeholder .segment,
+      .cell.past-day .segment {
+        background: rgba(148, 163, 184, 0.14);
+        border-color: rgba(148, 163, 184, 0.28);
+        color: rgba(71, 85, 105, 0.7);
+      }
+      .cell.placeholder .segment-count,
+      .cell.past-day .segment-count {
+        color: inherit;
+      }
+      .segment:focus-visible {
+        outline: 2px solid rgba(59, 130, 246, 0.45);
+        outline-offset: 2px;
+      }
+      .segment.tooltip-open {
+        border-color: rgba(59, 130, 246, 0.55);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+      }
+      .segment-tooltip {
+        position: absolute;
+        bottom: calc(100% + 0.5rem);
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 200px;
+        max-width: 260px;
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.12);
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.18);
+        border-radius: 10px;
+        padding: 0.6rem 0.7rem;
+        z-index: 50;
+      }
+      .segment-tooltip::before {
+        content: "";
+        position: absolute;
+        bottom: -6px;
+        left: 50%;
+        transform: translateX(-50%) rotate(45deg);
+        width: 12px;
+        height: 12px;
+        background: inherit;
+        border-right: 1px solid rgba(15, 23, 42, 0.12);
+        border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+      }      .segment-tooltip-body {
         font-size: 0.78rem;
-        opacity: 0.76;
+        color: rgba(15, 23, 42, 0.75);
+      }
+      .segment-tooltip-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      .segment-tooltip-list li {
+        display: grid;
+        gap: 0.15rem;
+      }
+      .segment-tooltip-primary {
+        font-weight: 600;
+        color: rgba(15, 23, 42, 0.88);
+      }
+      .segment-tooltip-secondary {
+        display: none;
       }
       #legend {
         display: flex;
@@ -328,41 +480,35 @@
         display: inline-block;
       }
 
-      /* Mobile view - streamlined week cards */
+      /* Mobile view - condensed table */
       @media (max-width: 768px) {
         body {
-          padding: 0.5rem 0.75rem 1.25rem;
+          padding: 0.45rem 0.6rem 0.85rem;
           justify-content: flex-start;
           align-items: stretch;
-          overflow-y: hidden;
+          overflow: hidden;
         }
         main {
           display: flex;
           flex-direction: column;
           width: 100%;
           max-width: 100%;
-          height: calc(100vh - 1.75rem);
+          height: 100%;
           min-height: 0;
-          gap: 0.75rem;
+          gap: 0.55rem;
         }
         header {
           flex-direction: column;
           align-items: flex-start;
           gap: 0.2rem;
-          margin-bottom: 0.25rem;
+          margin-bottom: 0.2rem;
         }
         header h1 {
-          font-size: 1rem;
+          font-size: 0.98rem;
         }
-        .timezone-label {
-          display: none;
-        }
-        .last-updated-inline {
-          display: none;
-        }
-        .header-separator {
-          display: none;
-        }
+        .timezone-label,
+        .last-updated-inline,
+        .header-separator,
         #last-updated-text {
           display: none;
         }
@@ -372,108 +518,150 @@
           flex-direction: column;
           align-items: flex-start;
           gap: 0.2rem;
-          font-size: 1rem;
-          color: rgba(15, 23, 42, 0.68);
+          font-size: 0.95rem;
+          color: rgba(15, 23, 42, 0.7);
         }
         .header-meta .mobile-caption {
           display: block;
-          font-size: 1.12rem;
+          font-size: 1.08rem;
           font-weight: 600;
           letter-spacing: 0.01em;
           color: rgba(15, 23, 42, 0.82);
-          line-height: 1.15;
+          line-height: 1.12;
         }
         .mobile-footer {
           display: flex;
           justify-content: center;
           align-items: center;
-          font-size: 0.72rem;
-          color: rgba(15, 23, 42, 0.55);
-          padding-bottom: 0.25rem;
+          font-size: 0.68rem;
+          color: rgba(15, 23, 42, 0.5);
+          padding-bottom: 0;
           flex-shrink: 0;
         }
         #heat-grid {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 0.6rem;
-          overflow-y: auto;
+          gap: 0.4rem;
+          overflow: hidden;
           min-height: 0;
-          align-content: initial;
         }
         .weekday-row {
           display: none;
         }
         .week-group {
           display: none;
-          padding: 0.85rem;
-          border-radius: 14px;
-          background: rgba(226, 232, 240, 0.82);
+          padding: 0.75rem;
+          border-radius: 12px;
+          background: rgba(226, 232, 240, 0.78);
           border: 1px solid rgba(148, 163, 184, 0.35);
-          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+          box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
           backdrop-filter: blur(6px);
         }
         .week-group.active {
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.2rem;
           flex: 1;
+          min-height: 0;
           align-self: stretch;
         }
         .week-group .week-label {
           display: none;
         }
+        .mobile-segment-headers {
+          display: grid;
+          grid-template-columns: 0.9fr repeat(2, minmax(0, 1fr));
+          gap: 0.3rem;
+          padding: 0 0.35rem;
+          font-size: 0.55rem;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(15, 23, 42, 0.58);
+        }
+        .mobile-segment-headers span {
+          text-align: center;
+        }
+        .mobile-segment-headers span:first-child {
+          justify-self: flex-start;
+          text-align: left;
+        }
         .week-days {
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 0.4rem;
+          display: grid;
+          grid-auto-rows: minmax(0, 1fr);
+          gap: 0.2rem;
+          min-height: 0;
         }
         .cell {
-          flex: 0 0 auto;
-          aspect-ratio: auto;
-          width: auto;
-          padding: 0.55rem 0.7rem;
-          flex-direction: row;
-          align-items: center;
-          gap: 0.65rem;
-          border-radius: 12px;
+          display: grid;
+          grid-template-columns: 0.95fr repeat(2, minmax(0, 1fr));
+          gap: 0.25rem;
+          align-items: stretch;
+          padding: 0.35rem 0.4rem;
+          border-radius: 10px;
           min-height: 0;
-          min-width: 0;
         }
         .cell.empty {
           display: none;
         }
         .day-name {
           display: block;
-          font-size: 0.62rem;
+          grid-column: 1;
+          align-self: center;
+          font-size: 0.72rem;
           font-weight: 600;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: rgba(15, 23, 42, 0.52);
-          flex: 0 0 auto;
+          letter-spacing: 0.02em;
+          text-transform: none;
+          color: rgba(15, 23, 42, 0.72);
         }
         .count {
-          font-size: 1.2rem;
-          line-height: 1.2;
-          color: rgba(15, 23, 42, 0.9);
+          display: none;
+        }
+        .segment-wrap {
+          position: static;
+          grid-column: 2 / span 2;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.2rem;
+          align-items: stretch;
+        }
+        .segment-wrap::before {
+          display: none;
+        }
+        .segment {
+          min-height: 0;
+          padding: 0.3rem 0.25rem;
+          justify-content: center;
+          text-align: center;
+          border-radius: 10px;
+          border-left: none;
+        }
+        .segment:first-child,
+        .segment:last-child {
+          border-radius: 10px;
+        }
+        .segment-label {
+          display: none;
+        }
+        .segment-count {
+          font-size: 0.9rem;
+          font-weight: 700;
         }
         .date {
-          font-size: 0.7rem;
-          opacity: 0.62;
-          margin-left: auto;
+          display: none;
         }
         .account-indicator {
           position: fixed;
           top: 0.6rem;
           right: 0.6rem;
           margin: 0;
-          padding: 0.45rem;
-          border-radius: 999px;
-          font-size: 1.1rem;
+          padding: 0.4rem;
+          border-radius: 16px;
+          font-size: 1.05rem;
           background: rgba(248, 250, 252, 0.9);
           border: 1px solid rgba(148, 163, 184, 0.35);
-          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
+          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.14);
           backdrop-filter: blur(12px);
           z-index: 30;
         }
@@ -482,7 +670,7 @@
         }
         .account-indicator .settings-btn {
           margin: 0;
-          font-size: 1.1rem;
+          font-size: 1.05rem;
           line-height: 1;
         }
         #legend {
@@ -492,15 +680,15 @@
           position: sticky;
           top: 0.35rem;
           z-index: 10;
-          padding: 0.45rem 0.6rem;
+          padding: 0.4rem 0.55rem;
           border-radius: 12px;
           background: rgba(248, 250, 252, 0.9);
-          box-shadow: 0 12px 25px rgba(15, 23, 42, 0.12);
+          box-shadow: 0 12px 22px rgba(15, 23, 42, 0.1);
           backdrop-filter: blur(10px);
           margin-bottom: 0;
         }
         .week-nav .week-title {
-          font-size: 0.95rem;
+          font-size: 0.92rem;
         }
       }
       .week-nav {
@@ -600,6 +788,75 @@
           background: rgba(15, 23, 42, 0.92);
           box-shadow: 0 18px 32px rgba(2, 6, 23, 0.65);
         }
+        .cell {
+          background: rgba(15, 23, 42, 0.95);
+          border-color: rgba(148, 163, 184, 0.25);
+          box-shadow: 0 1px 2px rgba(2, 6, 23, 0.6);
+        }
+        .cell.placeholder,
+        .cell.past-day {
+          background: rgba(30, 41, 59, 0.55);
+          border-color: rgba(71, 85, 105, 0.6);
+          box-shadow: none;
+          color: rgba(203, 213, 225, 0.82);
+        }
+        .cell.placeholder .day-name,
+        .cell.past-day .day-name {
+          color: rgba(148, 163, 184, 0.75);
+        }
+        .segment {
+          box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+        }
+        .segment:last-child {
+          border-left: 1px solid rgba(71, 85, 105, 0.7);
+        }
+        .segment-label {
+          color: rgba(226, 232, 240, 0.78);
+        }
+        .segment-available {
+          background: rgba(34, 197, 94, 0.22);
+          border-color: rgba(34, 197, 94, 0.45);
+          color: #bbf7d0;
+        }
+        .segment-empty {
+          background: rgba(30, 41, 59, 0.6);
+          border-color: rgba(71, 85, 105, 0.7);
+          color: rgba(226, 232, 240, 0.75);
+        }
+        .cell.placeholder .segment,
+        .cell.past-day .segment {
+          background: rgba(30, 41, 59, 0.42);
+          border-color: rgba(71, 85, 105, 0.65);
+          color: rgba(203, 213, 225, 0.72);
+        }
+        .cell.placeholder .segment-count,
+        .cell.past-day .segment-count {
+          color: inherit;
+        }
+        .mobile-segment-headers span {
+          color: rgba(226, 232, 240, 0.74);
+        }
+        .segment-wrap::before {
+          background: rgba(71, 85, 105, 0.65);
+        }
+        .segment-tooltip {
+          background: rgba(15, 23, 42, 0.95);
+          border-color: rgba(148, 163, 184, 0.22);
+          box-shadow: 0 20px 45px rgba(2, 6, 23, 0.55);
+          color: rgba(226, 232, 240, 0.85);
+        }
+        .segment-tooltip::before {
+          border-right-color: rgba(148, 163, 184, 0.22);
+          border-bottom-color: rgba(148, 163, 184, 0.22);
+        }        .segment-tooltip-secondary {
+          display: none;
+        }
+      }
+
+      @media (min-width: 769px) {
+        .cell {
+          aspect-ratio: 1 / 1;
+        }
       }
     </style>
   </head>
@@ -618,7 +875,7 @@
         <span class="header-separator">•</span>
         <span id="last-updated" class="header-meta">
           <span id="last-updated-text">Loading…</span>
-          <span class="mobile-caption"># of housemates free from 6-10pm</span>
+          <span class="mobile-caption">Housemates free</span>
         </span>
         <a href="https://house-availability.simonwisdom.workers.dev/auth/google/start"
            class="connect-btn"
@@ -710,6 +967,43 @@
         "#1B4DA0"
       ];
       const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const segmentOrder = ["morning", "evening"];
+      const segmentLabels = {
+        morning: "AM",
+        evening: "PM"
+      };
+      const segmentHeaderLabels = {
+        morning: "AM (9-12)",
+        evening: "PM (6-10)"
+      };
+
+      function formatAvailabilityDisplay(count, useEmoji = false) {
+        const value = Number.isFinite(count) ? count : 0;
+        if (useEmoji) {
+          if (value <= 0) return "—";
+          const icon = "🧑";
+          if (value <= 3) return icon.repeat(value);
+          return `${icon}×${value}`;
+        }
+        if (value <= 0) return "—";
+        return value.toString();
+      }
+
+      function formatAvailabilityDescription(count) {
+        const value = Number.isFinite(count) ? count : 0;
+        if (value <= 0) return "No one free";
+        if (value === 1) return "1 person free";
+        return `${value} people free`;
+      }
+
+      function formatMobileDayLabel(dateStr, weekday) {
+        const date = new Date(`${dateStr}T00:00:00Z`);
+        const dayPart = date.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric"
+        });
+        return `${weekday} ${dayPart}`;
+      }
 
       const heatGrid = document.getElementById("heat-grid");
       const tzEl = document.getElementById("timezone");
@@ -731,6 +1025,171 @@
 
       let currentWeekIndex = 0;
       let totalWeeks = 0;
+      let availabilityUsers = {};
+      let activeSegmentTooltip = null;
+      let activeSegmentTrigger = null;
+      let segmentTooltipId = 0;
+      const pointerCoarseMedia = window.matchMedia('(pointer: coarse)');
+
+      function isCoarsePointer() {
+        return pointerCoarseMedia.matches;
+      }
+
+      function closeSegmentTooltip() {
+        if (activeSegmentTooltip && activeSegmentTooltip.parentElement) {
+          activeSegmentTooltip.parentElement.removeChild(activeSegmentTooltip);
+        }
+        if (activeSegmentTrigger) {
+          activeSegmentTrigger.classList.remove('tooltip-open');
+          activeSegmentTrigger.setAttribute('aria-expanded', 'false');
+          activeSegmentTrigger.removeAttribute('aria-describedby');
+        }
+        activeSegmentTooltip = null;
+        activeSegmentTrigger = null;
+      }
+
+      function getUserIdentity(userId) {
+        const entry = availabilityUsers?.[userId];
+        const email = entry?.email || '';
+        const displayName = entry?.displayName?.trim() || '';
+        const primary = displayName || email || userId;
+        const displayLabel = primary.split(' ')[0];
+        return { primary, displayLabel };
+      }
+
+      function showSegmentTooltip(triggerEl) {
+        if (!(triggerEl instanceof HTMLElement)) return;
+
+        if (activeSegmentTrigger === triggerEl) {
+          if (isCoarsePointer()) {
+            closeSegmentTooltip();
+          }
+          return;
+        }
+
+        closeSegmentTooltip();
+
+        const dateIso = triggerEl.dataset.date || '';
+        const segmentKey = triggerEl.dataset.segmentKey || '';
+        const userIds = (triggerEl.dataset.userIds || '').split(',').filter(Boolean);
+        const isPlaceholder = triggerEl.dataset.placeholder === 'true';
+        const tooltip = document.createElement('div');
+        tooltip.className = 'segment-tooltip';
+        tooltip.setAttribute('role', 'tooltip');
+        const tooltipId = `segment-tooltip-${++segmentTooltipId}`;
+        tooltip.id = tooltipId;
+
+        const body = document.createElement('div');
+        body.className = 'segment-tooltip-body';
+
+        if (userIds.length === 0) {
+          body.textContent = isPlaceholder
+            ? 'No availability yet.'
+            : 'No one free.';
+        } else {
+          const list = document.createElement('ul');
+          list.className = 'segment-tooltip-list';
+
+          userIds
+            .map((id) => ({ id, ...getUserIdentity(id) }))
+            .sort((a, b) => a.primary.localeCompare(b.primary))
+            .forEach((entry) => {
+              const item = document.createElement('li');
+
+              const primary = document.createElement('span');
+              primary.className = 'segment-tooltip-primary';
+              primary.textContent = entry.displayLabel;
+
+              item.appendChild(primary);
+
+              list.appendChild(item);
+            });
+
+          body.appendChild(list);
+        }
+
+        tooltip.append(body);
+        tooltip.addEventListener('click', (event) => event.stopPropagation());
+
+        triggerEl.appendChild(tooltip);
+        triggerEl.classList.add('tooltip-open');
+        triggerEl.setAttribute('aria-expanded', 'true');
+        triggerEl.setAttribute('aria-describedby', tooltipId);
+
+        activeSegmentTooltip = tooltip;
+        activeSegmentTrigger = triggerEl;
+      }
+
+      function handleSegmentClick(event) {
+        event.stopPropagation();
+        if (!isCoarsePointer()) {
+          return;
+        }
+        const target = event.currentTarget;
+        if (target instanceof HTMLElement) {
+          showSegmentTooltip(target);
+        }
+      }
+
+      function handleSegmentMouseEnter(event) {
+        if (isCoarsePointer()) return;
+        const target = event.currentTarget;
+        if (target instanceof HTMLElement) {
+          showSegmentTooltip(target);
+        }
+      }
+
+      function handleSegmentMouseLeave(event) {
+        if (isCoarsePointer()) return;
+        const target = event.currentTarget;
+        if (target === activeSegmentTrigger) {
+          closeSegmentTooltip();
+        }
+      }
+
+      function handleSegmentFocus(event) {
+        const target = event.currentTarget;
+        if (target instanceof HTMLElement) {
+          showSegmentTooltip(target);
+        }
+      }
+
+      function handleSegmentBlur(event) {
+        const target = event.currentTarget;
+        if (target === activeSegmentTrigger) {
+          closeSegmentTooltip();
+        }
+      }
+
+      function handleSegmentKeydown(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          const target = event.currentTarget;
+          if (target instanceof HTMLElement) {
+            showSegmentTooltip(target);
+          }
+        }
+      }
+
+      document.addEventListener('click', () => {
+        if (!activeSegmentTooltip) return;
+        closeSegmentTooltip();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeSegmentTooltip();
+        }
+      });
+
+      if (typeof pointerCoarseMedia.addEventListener === 'function') {
+        pointerCoarseMedia.addEventListener('change', closeSegmentTooltip);
+      } else if (typeof pointerCoarseMedia.addListener === 'function') {
+        pointerCoarseMedia.addListener(closeSegmentTooltip);
+      }
+
+      window.addEventListener('resize', closeSegmentTooltip);
+      window.addEventListener('scroll', closeSegmentTooltip, { passive: true });
 
       if (connectButton) {
         connectButton.href = `${workerOrigin}/auth/google/start`;
@@ -814,6 +1273,12 @@
         });
       }
 
+      function offsetIsoDate(baseIso, offsetDays) {
+        const date = new Date(`${baseIso}T00:00:00Z`);
+        date.setUTCDate(date.getUTCDate() + offsetDays);
+        return date.toISOString().split('T')[0];
+      }
+
       function formatRelative(datetime, timezone) {
         if (!datetime) return "Not synced";
         const date = new Date(datetime);
@@ -895,6 +1360,7 @@
         const timezone = data.timezone || "Europe/London";
         if (tzEl) tzEl.textContent = timezone;
         setLastUpdatedDisplay(formatRelative(data.lastUpdatedIso, timezone));
+        closeSegmentTooltip();
 
         // Calculate unique contributing users
         const uniqueUsers = new Set();
@@ -922,11 +1388,24 @@
         );
         if (currentWeekIndex === -1) currentWeekIndex = 0;
 
-        const maxFree = data.days.reduce((acc, day) => Math.max(acc, day.freeCount), 0);
-        const scaleMax = Math.max(maxFree, palette.length - 1);
+        const currentWeekDays = weeks[currentWeekIndex] || [];
+        const todayWeekIndex = currentWeekDays.findIndex(day => day && day.date === todayIso);
+
+        const maxSegment = data.days.reduce((acc, day) => {
+          const segments = day.segments || {};
+          let localMax = acc;
+          segmentOrder.forEach((key) => {
+            const value = segments[key]?.freeCount ?? 0;
+            if (value > localMax) localMax = value;
+          });
+          return localMax;
+        }, 0);
+        const segmentScaleMax = Math.max(maxSegment, palette.length - 1);
 
         heatGrid.innerHTML = "";
         const frag = document.createDocumentFragment();
+
+        const mobileLayout = window.matchMedia("(max-width: 768px)").matches;
 
         const headerRow = document.createElement("div");
         headerRow.className = "weekday-row";
@@ -956,41 +1435,126 @@
           label.textContent = firstDay ? `Week of ${formatWeekLabel(firstDay.date)}` : "";
           group.appendChild(label);
 
+          if (mobileLayout) {
+            const headersRow = document.createElement("div");
+            headersRow.className = "mobile-segment-headers";
+            const headerParts = ["<span>Day</span>"];
+            segmentOrder.forEach((segmentKey) => {
+              headerParts.push(`<span>${segmentHeaderLabels[segmentKey]}</span>`);
+            });
+            headersRow.innerHTML = headerParts.join("");
+            group.appendChild(headersRow);
+          }
+
           const daysWrap = document.createElement("div");
           daysWrap.className = "week-days";
           group.appendChild(daysWrap);
 
-          week.forEach((day, idx) => {
+          week.forEach((originalDay, idx) => {
             const cell = document.createElement("div");
             cell.className = "cell";
             cell.dataset.weekIndex = weekIdx;
 
-            if (!day) {
-              cell.classList.add("empty");
-              daysWrap.appendChild(cell);
-              return;
+            let dayData = originalDay;
+            let isPlaceholder = false;
+
+            if (!dayData) {
+              if (
+                weekIdx === currentWeekIndex &&
+                todayWeekIndex !== -1 &&
+                idx < todayWeekIndex
+              ) {
+                const placeholderIso = offsetIsoDate(todayIso, idx - todayWeekIndex);
+                dayData = {
+                  date: placeholderIso,
+                  freeCount: 0,
+                  segments: {},
+                  placeholder: true
+                };
+                isPlaceholder = true;
+              } else {
+                cell.classList.add("empty");
+                daysWrap.appendChild(cell);
+                return;
+              }
             }
 
-            const colorIndex = scaleMax === 0 ? 0 : Math.round((day.freeCount / scaleMax) * (palette.length - 1));
-            cell.style.background = palette[Math.min(colorIndex, palette.length - 1)];
+            cell.dataset.date = dayData.date;
+
+            const isPastDay = weekIdx === currentWeekIndex && dayData.date < todayIso;
 
             if (idx >= 5) cell.classList.add("weekend");
-            if (day.date === todayIso) cell.classList.add("today");
-            if (day.freeCount === maxFree && maxFree > 0) cell.classList.add("peak");
+            if (isPlaceholder) cell.classList.add("placeholder");
+            if (isPastDay) cell.classList.add("past-day");
 
             const dayName = document.createElement("div");
             dayName.className = "day-name";
-            dayName.textContent = weekdayNames[idx];
+            dayName.textContent = mobileLayout
+              ? formatMobileDayLabel(dayData.date, weekdayNames[idx])
+              : weekdayNames[idx];
 
-            const count = document.createElement("div");
-            count.className = "count";
-            count.textContent = day.freeCount.toString();
+            const segmentWrap = document.createElement("div");
+            segmentWrap.className = "segment-wrap";
 
-            const dateLabel = document.createElement("div");
-            dateLabel.className = "date";
-            dateLabel.textContent = formatDate(day.date);
+            segmentOrder.forEach((segmentKey) => {
+              const segmentData = (dayData.segments && dayData.segments[segmentKey]) || { freeCount: 0 };
+              const segmentEl = document.createElement("div");
+              segmentEl.className = `segment segment-${segmentKey}`;
 
-            cell.append(dayName, count, dateLabel);
+              const segmentLabel = document.createElement("div");
+              segmentLabel.className = "segment-label";
+              segmentLabel.textContent = segmentLabels[segmentKey];
+
+              const segmentCount = document.createElement("div");
+              segmentCount.className = "segment-count";
+              const rawSegmentCount = segmentData.freeCount ?? 0;
+              segmentCount.textContent = formatAvailabilityDisplay(rawSegmentCount, mobileLayout);
+
+              const freeUserIds = Array.isArray(segmentData.freeUserIds) ? segmentData.freeUserIds : [];
+              segmentEl.dataset.userIds = freeUserIds.join(',');
+              segmentEl.dataset.date = dayData.date;
+              segmentEl.dataset.segmentKey = segmentKey;
+              segmentEl.dataset.placeholder = isPlaceholder ? 'true' : 'false';
+              segmentEl.dataset.past = isPastDay ? 'true' : 'false';
+              segmentEl.setAttribute('role', 'button');
+              segmentEl.setAttribute('aria-haspopup', 'true');
+              segmentEl.setAttribute('aria-expanded', 'false');
+              segmentEl.tabIndex = 0;
+              segmentEl.addEventListener('click', handleSegmentClick);
+              segmentEl.addEventListener('keydown', handleSegmentKeydown);
+              segmentEl.addEventListener('mouseenter', handleSegmentMouseEnter);
+              segmentEl.addEventListener('mouseleave', handleSegmentMouseLeave);
+              segmentEl.addEventListener('focus', handleSegmentFocus);
+              segmentEl.addEventListener('blur', handleSegmentBlur);
+
+              const treatAsAvailable = rawSegmentCount > 0 && !isPastDay && !isPlaceholder;
+              if (treatAsAvailable) {
+                segmentEl.classList.add("segment-available");
+              } else {
+                segmentEl.classList.add("segment-empty");
+              }
+
+              const tooltipText = `${segmentHeaderLabels[segmentKey]}: ${formatAvailabilityDescription(rawSegmentCount)}`;
+              segmentEl.title = tooltipText;
+              segmentEl.setAttribute("aria-label", tooltipText);
+
+              segmentEl.append(segmentLabel, segmentCount);
+              segmentWrap.appendChild(segmentEl);
+            });
+
+            if (mobileLayout) {
+              cell.append(dayName, segmentWrap);
+            } else {
+              const count = document.createElement("div");
+              count.className = "count";
+              count.textContent = formatAvailabilityDisplay(dayData.freeCount ?? 0);
+
+              const dateLabel = document.createElement("div");
+              dateLabel.className = "date";
+              dateLabel.textContent = formatDate(dayData.date);
+
+              cell.append(dayName, count, segmentWrap, dateLabel);
+            }
             daysWrap.appendChild(cell);
           });
 
@@ -998,11 +1562,11 @@
         });
 
         heatGrid.appendChild(frag);
-        buildLegend(maxFree, scaleMax);
+        buildLegend(maxSegment, segmentScaleMax);
 
         // Update week title
-        const currentWeek = weeks[currentWeekIndex];
-        const firstDay = currentWeek ? currentWeek.find(Boolean) : null;
+        const currentWeekForTitle = weeks[currentWeekIndex];
+        const firstDay = currentWeekForTitle ? currentWeekForTitle.find(Boolean) : null;
         if (weekTitle && firstDay) {
           weekTitle.textContent = `Week of ${formatWeekLabel(firstDay.date)}`;
         }
@@ -1022,6 +1586,7 @@
           }
 
           const data = await response.json();
+          availabilityUsers = data.users || {};
 
           // Check if we have any data
           if (!data.days || data.days.length === 0) {
@@ -1134,12 +1699,20 @@
         // Generate fake data for visual appeal
         const fakeDays = [];
         const today = new Date();
+        availabilityUsers = {};
+        closeSegmentTooltip();
         for (let i = 0; i < 28; i++) {
           const date = new Date(today);
           date.setDate(date.getDate() + i);
+          const morning = Math.floor(Math.random() * 5);
+          const evening = Math.floor(Math.random() * 5);
           fakeDays.push({
             date: date.toISOString().split('T')[0],
-            freeCount: Math.floor(Math.random() * 5)
+            freeCount: Math.max(morning, evening),
+            segments: {
+              morning: { freeCount: morning },
+              evening: { freeCount: evening }
+            }
           });
         }
 
@@ -1156,10 +1729,11 @@
           if (currentWeekIndex > 0) {
             currentWeekIndex--;
             const firstCell = document.querySelector(`[data-week-index="${currentWeekIndex}"].cell:not(.empty)`);
-            if (weekTitle && firstCell) {
-              const dateText = firstCell.querySelector('.date').textContent;
-              weekTitle.textContent = `Week of ${dateText}`;
+            const dateIso = firstCell?.dataset.date;
+            if (weekTitle && dateIso) {
+              weekTitle.textContent = `Week of ${formatWeekLabel(dateIso)}`;
             }
+            closeSegmentTooltip();
             updateWeekNavigation();
           }
         });
@@ -1170,10 +1744,11 @@
           if (currentWeekIndex < totalWeeks - 1) {
             currentWeekIndex++;
             const firstCell = document.querySelector(`[data-week-index="${currentWeekIndex}"].cell:not(.empty)`);
-            if (weekTitle && firstCell) {
-              const dateText = firstCell.querySelector('.date').textContent;
-              weekTitle.textContent = `Week of ${dateText}`;
+            const dateIso = firstCell?.dataset.date;
+            if (weekTitle && dateIso) {
+              weekTitle.textContent = `Week of ${formatWeekLabel(dateIso)}`;
             }
+            closeSegmentTooltip();
             updateWeekNavigation();
           }
         });
