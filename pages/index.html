@@ -494,25 +494,26 @@
       /* Mobile view - condensed table */
       @media (max-width: 768px) {
         body {
-          padding: 0.45rem 0.6rem 0.85rem;
+          padding: 0.4rem 0.6rem 0.4rem;
           justify-content: flex-start;
           align-items: stretch;
           overflow: hidden;
+          min-height: 100vh;
         }
         main {
           display: flex;
           flex-direction: column;
           width: 100%;
           max-width: 100%;
-          height: 100%;
+          max-height: 95vh;
           min-height: 0;
-          gap: 0.55rem;
+          gap: 0.3rem;
         }
         header {
           flex-direction: column;
           align-items: flex-start;
-          gap: 0.2rem;
-          margin-bottom: 0.2rem;
+          gap: 0.1rem;
+          margin-bottom: 0.1rem;
         }
         header h1 {
           font-size: 0.98rem;
@@ -544,16 +545,16 @@
           display: flex;
           justify-content: center;
           align-items: center;
-          font-size: 0.68rem;
+          font-size: 0.65rem;
           color: rgba(15, 23, 42, 0.5);
-          padding-bottom: 0;
+          padding: 0.25rem 0 0 0;
           flex-shrink: 0;
         }
         #heat-grid {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 0.4rem;
+          gap: 0.25rem;
           overflow: hidden;
           min-height: 0;
         }
@@ -562,7 +563,7 @@
         }
         .week-group {
           display: none;
-          padding: 0.75rem;
+          padding: 0.5rem;
           border-radius: 12px;
           background: rgba(226, 232, 240, 0.78);
           border: 1px solid rgba(148, 163, 184, 0.35);
@@ -572,7 +573,7 @@
         .week-group.active {
           display: flex;
           flex-direction: column;
-          gap: 0.2rem;
+          gap: 0.12rem;
           flex: 1;
           min-height: 0;
           align-self: stretch;
@@ -601,7 +602,7 @@
           flex: 1;
           display: grid;
           grid-auto-rows: minmax(0, 1fr);
-          gap: 0.2rem;
+          gap: 0.12rem;
           min-height: 0;
         }
         .cell {
@@ -729,7 +730,7 @@
           position: sticky;
           top: 0.35rem;
           z-index: 10;
-          padding: 0.4rem 0.55rem;
+          padding: 0.35rem 0.5rem;
           border-radius: 12px;
           background: rgba(248, 250, 252, 0.9);
           box-shadow: 0 12px 22px rgba(15, 23, 42, 0.1);
