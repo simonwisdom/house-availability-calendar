@@ -637,46 +637,90 @@ function handleGoogleStart(env: Env): Response {
   return Response.redirect(url.toString(), 302);
 }
 
+const MANUAL_SYNC_LABEL = "manual-all";
+const MANUAL_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+
 async function handleManualSync(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   try {
+    const session = await ensureSession(request, env, "api");
+    if (!session.authorized) {
+      return session.response;
+    }
+
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    let userId = typeof body.userId === "string" ? body.userId.trim() : "";
+    const scope = typeof body.scope === "string" ? body.scope : "all";
 
-    if (!userId) {
-      const session = await ensureSession(request, env, "api");
-      if (!session.authorized) {
-        return session.response;
-      }
-      userId = session.userId;
-    }
+    const now = Date.now();
+    const nowIso = new Date(now).toISOString();
 
-    const user = await env.DB.prepare(
-      `SELECT id, provider, calendar_id as calendarId, refresh_token_encrypted as refreshToken,
-              caldav_url as caldavUrl, caldav_username as caldavUsername
-         FROM users WHERE id = ?`
+    const { results: recentRuns } = await env.DB.prepare(
+      `SELECT id, started_at AS startedAt
+         FROM sync_runs
+        WHERE message LIKE ?
+        ORDER BY started_at DESC
+        LIMIT 1`
     )
-      .bind(userId)
-      .first<{
-        id: string;
-        provider: "google" | "caldav";
-        calendarId: string;
-        refreshToken: string;
-        caldavUrl?: string;
-        caldavUsername?: string;
-      }>();
+      .bind(`${MANUAL_SYNC_LABEL}%`)
+      .all<{ id: number; startedAt: string }>();
 
-    if (!user) {
-      return jsonWithCors({ ok: false, error: "not_found" }, request, 404);
+    const latest = recentRuns?.[0];
+    if (latest?.startedAt) {
+      const lastStarted = Date.parse(latest.startedAt);
+      if (!Number.isNaN(lastStarted) && now - lastStarted < MANUAL_SYNC_COOLDOWN_MS) {
+        const retryAtMs = lastStarted + MANUAL_SYNC_COOLDOWN_MS;
+        const retryAfterSeconds = Math.max(1, Math.ceil((retryAtMs - now) / 1000));
+        return jsonWithCors(
+          {
+            ok: false,
+            error: "cooldown",
+            retryAfterSeconds,
+            retryAtIso: new Date(retryAtMs).toISOString(),
+          },
+          request,
+          429
+        );
+      }
     }
+
+    const insertResult = await env.DB.prepare(
+      `INSERT INTO sync_runs (user_id, started_at, status, message)
+       VALUES (NULL, ?, ?, ?)`
+    )
+      .bind(nowIso, "running", MANUAL_SYNC_LABEL)
+      .run();
+
+    const manualRunId = insertResult.meta?.last_row_id;
 
     ctx.waitUntil(
-      performFreeBusySync(env, user).catch((error) => {
-        console.error("Manual sync failed", { userId, error });
-        throw error;
-      })
+      (async () => {
+        try {
+          await runNightlySync(env);
+          if (typeof manualRunId === "number") {
+            await env.DB.prepare(
+              `UPDATE sync_runs
+                  SET completed_at = ?, status = ?, message = ?
+                WHERE id = ?`
+            )
+              .bind(new Date().toISOString(), "success", MANUAL_SYNC_LABEL, manualRunId)
+              .run();
+          }
+        } catch (error) {
+          console.error("Manual all-user sync failed", error);
+          if (typeof manualRunId === "number") {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            await env.DB.prepare(
+              `UPDATE sync_runs
+                  SET completed_at = ?, status = ?, message = ?
+                WHERE id = ?`
+            )
+              .bind(new Date().toISOString(), "error", `${MANUAL_SYNC_LABEL} error: ${errorMessage}`, manualRunId)
+              .run();
+          }
+        }
+      })()
     );
 
-    return jsonWithCors({ ok: true, queued: true }, request);
+    return jsonWithCors({ ok: true, queued: true, scope }, request);
   } catch (error) {
     console.error("Manual sync handler error", error);
     return jsonWithCors({ ok: false, error: "internal" }, request, 500);

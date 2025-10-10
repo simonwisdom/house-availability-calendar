@@ -236,9 +236,9 @@
 
       <div class="card">
         <h2>Availability Data</h2>
-        <p>Trigger a manual availability sync when the schedule looks out of date.</p>
+        <p>Run a fresh availability sync for every connected calendar.</p>
         <div class="actions">
-          <button class="btn btn-secondary" id="manual-sync-button">Resync Availability</button>
+          <button class="btn btn-secondary" id="manual-sync-button">Resync All Availability</button>
         </div>
         <p id="manual-sync-status" class="status-text" role="status" aria-live="polite"></p>
       </div>
@@ -375,26 +375,31 @@
       manualSyncButton?.addEventListener('click', async () => {
         if (!manualSyncButton) return;
 
-        const originalLabel = manualSyncButton.textContent || 'Resync Availability';
+        const originalLabel = manualSyncButton.textContent || 'Resync All Availability';
         manualSyncButton.disabled = true;
         manualSyncButton.textContent = 'Syncing…';
-        updateManualSyncStatus('Starting sync…', 'info');
+        updateManualSyncStatus('Starting a full resync…', 'info');
 
         try {
           const response = await fetch(`${workerOrigin}/api/manual-sync`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({})
+            body: JSON.stringify({ scope: 'all' })
           });
 
           const result = await response.json().catch(() => ({}));
 
           if (response.ok && result.ok) {
-            updateManualSyncStatus('Sync queued. Check back in a moment for refreshed availability.', 'success');
+            updateManualSyncStatus('All calendars queued. Availability should refresh shortly.', 'success');
           } else {
-            const message = result.error || 'Unable to trigger sync. Please try again.';
-            updateManualSyncStatus(message, 'error');
+            if (response.status === 429 && result.retryAfterSeconds) {
+              const minutes = Math.ceil(result.retryAfterSeconds / 60);
+              updateManualSyncStatus(`Please wait about ${minutes} minute${minutes === 1 ? '' : 's'} before trying again.`, 'error');
+            } else {
+              const message = result.error || 'Unable to trigger sync. Please try again.';
+              updateManualSyncStatus(message, 'error');
+            }
           }
         } catch (error) {
           console.error('Manual sync failed:', error);
