@@ -28,6 +28,7 @@ type AvailabilityResponse = {
   days: AvailabilityCell[];
   lastUpdatedIso?: string;
   users?: Record<string, { email: string; displayName?: string | null }>;
+  contributors?: number;
 };
 
 const SESSION_COOKIE_NAME = "user_session";
@@ -600,11 +601,25 @@ async function handleAvailability(env: Env, request: Request): Promise<Response>
     }
   }
 
+  const contributorRow = await env.DB.prepare(
+    `SELECT COUNT(*) as count
+       FROM users u
+      WHERE (
+        u.calendar_id IS NOT NULL AND TRIM(u.calendar_id) != ''
+      )
+         OR EXISTS (
+           SELECT 1 FROM user_calendars uc WHERE uc.user_id = u.id
+         )`
+  )
+    .first<{ count: number }>();
+  const contributorCount = contributorRow ? Number(contributorRow.count) : 0;
+
   const payload: AvailabilityResponse = {
     timezone,
     days,
     lastUpdatedIso: latest,
     users: userDirectory,
+    contributors: contributorCount,
   };
 
   return jsonWithCors(payload, request);

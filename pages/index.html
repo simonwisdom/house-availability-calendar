@@ -361,6 +361,11 @@
         display: inline-block;
         border: 1px solid rgba(15, 23, 42, 0.08);
       }
+      .legend-note {
+        font-size: 0.72rem;
+        color: rgba(15, 23, 42, 0.6);
+        margin-top: 0.35rem;
+      }
 
       .mobile-footer {
         display: flex;
@@ -915,6 +920,9 @@
         .initials-circle {
           border-color: rgba(255, 255, 255, 0.25);
         }
+        .legend-note {
+          color: rgba(203, 213, 225, 0.7);
+        }
       }
 
       @media (min-width: 769px) {
@@ -1090,6 +1098,7 @@
       let currentWeekIndex = 0;
       let totalWeeks = 0;
       let availabilityUsers = {};
+      let totalContributors = 0;
       let activeSegmentTooltip = null;
       let activeSegmentTrigger = null;
       let segmentTooltipId = 0;
@@ -1472,13 +1481,25 @@
         legend.innerHTML = "";
         const frag = document.createDocumentFragment();
         const capped = scaleMax || 0;
+        const gradientTriggerCount =
+          totalContributors > 0 ? Math.floor(totalContributors / 2) + 1 : 0;
 
         for (let i = 0; i <= capped; i += 1) {
           const colorIdx = capped === 0 ? 0 : Math.round((i / capped) * (palette.length - 1));
           const span = document.createElement("span");
           span.className = "legend-item";
-          span.innerHTML = `<span class="swatch" style="background:${palette[colorIdx]}"></span>${i} free`;
+          const meetsThreshold =
+            totalContributors === 0 ? i > 0 : i >= gradientTriggerCount;
+          const swatchColor = meetsThreshold ? palette[colorIdx] : "rgba(148, 163, 184, 0.18)";
+          span.innerHTML = `<span class="swatch" style="background:${swatchColor}"></span>${i} free`;
           frag.appendChild(span);
+        }
+
+        if (totalContributors > 0) {
+          const note = document.createElement("div");
+          note.className = "legend-note";
+          note.textContent = `Gradient shows once more than half of the ${totalContributors} connected calendars are free (${gradientTriggerCount}+ people).`;
+          frag.appendChild(note);
         }
 
         legend.appendChild(frag);
@@ -1516,6 +1537,11 @@
           }
         });
         const userCount = uniqueUsers.size;
+        const contributorsFromResponse =
+          typeof data.contributors === "number" && Number.isFinite(data.contributors)
+            ? data.contributors
+            : 0;
+        totalContributors = Math.max(userCount, contributorsFromResponse);
 
         // Update account indicator with user count
         const accountEmailEl = document.getElementById('account-email');
@@ -1717,12 +1743,20 @@
               segmentEl.addEventListener('focus', handleSegmentFocus);
               segmentEl.addEventListener('blur', handleSegmentBlur);
 
+              segmentEl.style.backgroundColor = "";
+              segmentEl.style.color = "";
+
               const treatAsAvailable = rawSegmentCount > 0 && !isPastDay && !isPlaceholder;
+              const meetsGradientThreshold =
+                totalContributors <= 0
+                  ? rawSegmentCount > 0
+                  : rawSegmentCount / totalContributors > 0.5;
+
               if (treatAsAvailable) {
                 segmentEl.classList.add("segment-available");
 
-                // Apply color gradient on all views
-                if (segmentScaleMax > 0) {
+                // Apply color gradient only when more than half of connected users are free
+                if (meetsGradientThreshold && segmentScaleMax > 0) {
                   const colorIndex = Math.round((rawSegmentCount / segmentScaleMax) * (palette.length - 1));
                   const bgColor = palette[Math.min(colorIndex, palette.length - 1)];
                   segmentEl.style.backgroundColor = bgColor;
@@ -1903,6 +1937,7 @@
         const fakeDays = [];
         const today = new Date();
         availabilityUsers = {};
+        totalContributors = 6;
         closeSegmentTooltip();
         for (let i = 0; i < 28; i++) {
           const date = new Date(today);
