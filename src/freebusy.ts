@@ -61,6 +61,8 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
 
     // Fetch busy windows from all selected calendars
     const allBusyWindows: BusyWindow[] = [];
+    const fetchErrors: Array<{ calendarId: string; reason: string }> = [];
+    let successfulCalendars = 0;
 
     for (const calendarId of calendarIds) {
       try {
@@ -73,12 +75,29 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
         };
 
         const busyWindows = await provider.fetchFreeBusy(credentials, timeMinIso, timeMaxIso, timezone);
+        successfulCalendars += 1;
         allBusyWindows.push(...busyWindows);
       } catch (error) {
         // Log the error but continue with other calendars
         console.error(`Failed to fetch freebusy for calendar ${calendarId}:`, error);
+        fetchErrors.push({ calendarId, reason: describeError(error) });
         // Continue to next calendar
       }
+    }
+
+    if (successfulCalendars === 0) {
+      const errorSummary =
+        fetchErrors.length > 0
+          ? fetchErrors.map(({ calendarId, reason }) => `${calendarId}: ${reason}`).join("; ")
+          : "unknown errors";
+      throw new Error(`All calendar free/busy fetches failed: ${errorSummary}`);
+    }
+
+    if (fetchErrors.length > 0) {
+      console.warn("Freebusy fetch completed with partial failures", {
+        userId: user.id,
+        failedCalendars: fetchErrors.map(({ calendarId }) => calendarId),
+      });
     }
 
     const normalizedWindows = normalizeWindows(allBusyWindows);
@@ -87,12 +106,13 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
     await updateAvailability(env, user.id, normalizedWindows, dateStrings, timezone, nowIso);
 
     const completedIso = new Date().toISOString();
+    const completionMessage = fetchErrors.length > 0 ? buildPartialFailureMessage(fetchErrors) : null;
     await env.DB.prepare(
       `UPDATE sync_runs
-         SET completed_at = ?, status = ?, message = NULL
+         SET completed_at = ?, status = ?, message = ?
        WHERE id = ?`
     )
-      .bind(completedIso, "success", syncId)
+      .bind(completedIso, "success", completionMessage, syncId)
       .run();
   } catch (error) {
     const completedIso = new Date().toISOString();
@@ -366,5 +386,31 @@ async function recomputeDailySummaries(env: Env, dateStrings: string[], timestam
 
   if (summaryStatements.length > 0) {
     await env.DB.batch(summaryStatements);
+  }
+}
+
+function buildPartialFailureMessage(errors: Array<{ calendarId: string; reason: string }>): string {
+  const parts = errors.map(({ calendarId, reason }) => `${calendarId}: ${reason}`);
+  const joined = parts.join("; ");
+  const prefix = "partial_failure: ";
+  const maxLength = 480;
+  const fullMessage = `${prefix}${joined}`;
+  if (fullMessage.length <= maxLength) {
+    return fullMessage;
+  }
+  return `${fullMessage.slice(0, maxLength - 1)}…`;
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
   }
 }
