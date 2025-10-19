@@ -63,6 +63,7 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
     const allBusyWindows: BusyWindow[] = [];
     const fetchErrors: Array<{ calendarId: string; reason: string }> = [];
     let successfulCalendars = 0;
+    let reauthFlagged = false;
 
     for (const calendarId of calendarIds) {
       try {
@@ -77,10 +78,17 @@ export async function performFreeBusySync(env: Env, user: UserSyncContext): Prom
         const busyWindows = await provider.fetchFreeBusy(credentials, timeMinIso, timeMaxIso, timezone);
         successfulCalendars += 1;
         allBusyWindows.push(...busyWindows);
+        if (!reauthFlagged) {
+          await clearUserReauthRequired(env, user.id);
+        }
       } catch (error) {
         // Log the error but continue with other calendars
         console.error(`Failed to fetch freebusy for calendar ${calendarId}:`, error);
         fetchErrors.push({ calendarId, reason: describeError(error) });
+        if (!reauthFlagged && isReauthRequiredError(user.provider, error)) {
+          await markUserReauthRequired(env, user.id, describeError(error));
+          reauthFlagged = true;
+        }
         // Continue to next calendar
       }
     }
@@ -413,4 +421,41 @@ function describeError(error: unknown): string {
   } catch {
     return String(error);
   }
+}
+
+function isReauthRequiredError(provider: CalendarProviderType, error: unknown): boolean {
+  const message = describeError(error).toLowerCase();
+  if (message.includes("invalid_grant")) return true;
+  if (provider === "outlook" && message.includes("interaction_required")) return true;
+  return false;
+}
+
+async function markUserReauthRequired(env: Env, userId: string, reason: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const normalizedReason = reason.replace(/\s+/g, " ").trim().slice(0, 480);
+  await env.DB.prepare(
+    `UPDATE users
+        SET reauth_required = 1,
+            reauth_required_reason = ?,
+            reauth_required_at = ?,
+            updated_at = ?
+      WHERE id = ?`
+  )
+    .bind(normalizedReason || "Reauthentication required", nowIso, nowIso, userId)
+    .run();
+}
+
+async function clearUserReauthRequired(env: Env, userId: string): Promise<void> {
+  const nowIso = new Date().toISOString();
+  await env.DB.prepare(
+    `UPDATE users
+        SET reauth_required = 0,
+            reauth_required_reason = NULL,
+            reauth_required_at = NULL,
+            updated_at = ?
+      WHERE id = ?
+        AND reauth_required = 1`
+  )
+    .bind(nowIso, userId)
+    .run();
 }

@@ -68,43 +68,23 @@ export class CalDAVProvider implements CalendarProvider {
     const actualCalendar = await this.findFirstCalendar(calendarHome, username, password);
 
     // Use calendar-query instead of free-busy-query (iCloud doesn't support free-busy-query)
-    const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
-<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:prop>
-    <D:getetag/>
-    <C:calendar-data/>
-  </D:prop>
-  <C:filter>
-    <C:comp-filter name="VCALENDAR">
-      <C:comp-filter name="VEVENT">
-        <C:time-range start="${timeMin}" end="${timeMax}"/>
-      </C:comp-filter>
-    </C:comp-filter>
-  </C:filter>
-</C:calendar-query>`;
-
     const auth = btoa(`${username}:${password}`);
 
-    console.log("CalDAV REPORT to:", actualCalendar);
-
-    const response = await fetch(actualCalendar, {
-      method: "REPORT",
-      headers: {
-        "Content-Type": "application/xml; charset=utf-8",
-        Authorization: `Basic ${auth}`,
-        Depth: "1",
-      },
-      body: reportBody,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("CalDAV REPORT error:", response.status, errorText);
-      throw new Error(`CalDAV REPORT failed: ${response.status} - URL: ${actualCalendar}`);
+    const initial = await this.performCalendarReport(actualCalendar, auth, timeMinIso, timeMaxIso);
+    if (initial.ok) {
+      return this.parseCalendarQueryResponse(initial.body);
     }
 
-    const responseText = await response.text();
-    return this.parseCalendarQueryResponse(responseText);
+    if (initial.reason === "too_many_subrequests") {
+      console.warn("CalDAV REPORT hit subrequest limit, retrying with chunked range", {
+        calendar: actualCalendar,
+      });
+      return await this.fetchWithChunkedRanges(actualCalendar, auth, timeMinIso, timeMaxIso);
+    }
+
+    throw new Error(
+      `CalDAV REPORT failed: ${initial.status} - URL: ${actualCalendar} - ${initial.body.slice(0, 200)}`
+    );
   }
 
   private async findFirstCalendar(
@@ -359,6 +339,134 @@ export class CalDAVProvider implements CalendarProvider {
 
   private formatAsICalDateTime(isoString: string): string {
     return isoString.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  }
+
+  private async performCalendarReport(
+    calendarUrl: string,
+    auth: string,
+    startIso: string,
+    endIso: string
+  ): Promise<
+    | { ok: true; body: string }
+    | { ok: false; status: number; body: string; reason?: "too_many_subrequests" }
+  > {
+    const timeMin = this.formatAsICalDateTime(startIso);
+    const timeMax = this.formatAsICalDateTime(endIso);
+
+    const reportBody = `<?xml version="1.0" encoding="UTF-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <D:getetag/>
+    <C:calendar-data/>
+  </D:prop>
+  <C:filter>
+    <C:comp-filter name="VCALENDAR">
+      <C:comp-filter name="VEVENT">
+        <C:time-range start="${timeMin}" end="${timeMax}"/>
+      </C:comp-filter>
+    </C:comp-filter>
+  </C:filter>
+</C:calendar-query>`;
+
+    const response = await fetch(calendarUrl, {
+      method: "REPORT",
+      headers: {
+        "Content-Type": "application/xml; charset=utf-8",
+        Authorization: `Basic ${auth}`,
+        Depth: "1",
+      },
+      body: reportBody,
+    });
+
+    const bodyText = await response.text();
+    if (response.ok) {
+      return { ok: true, body: bodyText };
+    }
+
+    const reason = /too many subrequests/i.test(bodyText) ? "too_many_subrequests" : undefined;
+    console.error("CalDAV REPORT error:", response.status, bodyText.slice(0, 500));
+    return { ok: false, status: response.status, body: bodyText, reason };
+  }
+
+  private async fetchWithChunkedRanges(
+    calendarUrl: string,
+    auth: string,
+    startIso: string,
+    endIso: string
+  ): Promise<BusyWindow[]> {
+    const chunkSizes = [14, 7, 3, 1];
+    for (const days of chunkSizes) {
+      const result = await this.fetchByChunkSize(calendarUrl, auth, startIso, endIso, days);
+      if (result.ok) {
+        return result.windows;
+      }
+    }
+
+    throw new Error("CalDAV REPORT failed: Too many subrequests even after chunking");
+  }
+
+  private async fetchByChunkSize(
+    calendarUrl: string,
+    auth: string,
+    startIso: string,
+    endIso: string,
+    chunkDays: number
+  ): Promise<{ ok: true; windows: BusyWindow[] } | { ok: false }> {
+    const start = new Date(startIso);
+    const end = new Date(endIso);
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+      throw new Error("Invalid start or end ISO value for CalDAV chunked fetch");
+    }
+
+    const seen = new Set<string>();
+    const aggregated: BusyWindow[] = [];
+    const dayMs = 24 * 60 * 60 * 1000;
+    let cursor = new Date(start);
+
+    while (cursor < end) {
+      let next = new Date(Math.min(end.getTime(), cursor.getTime() + chunkDays * dayMs));
+      // Ensure progress and clamp to requested window
+      if (next <= cursor) {
+        next = new Date(Math.min(end.getTime(), cursor.getTime() + dayMs));
+        if (next <= cursor) {
+          next = new Date(cursor.getTime() + dayMs);
+        }
+      }
+
+      const chunkResult = await this.performCalendarReport(
+        calendarUrl,
+        auth,
+        cursor.toISOString(),
+        next.toISOString()
+      );
+
+      if (!chunkResult.ok) {
+        if (chunkResult.reason === "too_many_subrequests" && chunkDays > 1) {
+          // Try with smaller chunk size
+          return { ok: false };
+        }
+
+        throw new Error(
+          `CalDAV REPORT failed: ${chunkResult.status} - URL: ${calendarUrl} - ${chunkResult.body.slice(
+            0,
+            200
+          )}`
+        );
+      }
+
+      const windows = this.parseCalendarQueryResponse(chunkResult.body);
+      for (const window of windows) {
+        const key = `${window.start}__${window.end}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          aggregated.push(window);
+        }
+      }
+
+      cursor = next;
+    }
+
+    return { ok: true, windows: aggregated };
   }
 
   private parseCalendarQueryResponse(xmlText: string): BusyWindow[] {

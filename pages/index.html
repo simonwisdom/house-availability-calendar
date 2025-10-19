@@ -94,6 +94,47 @@
         text-decoration: none;
         margin-left: 0.25rem;
       }
+      .reauth-banner {
+        position: fixed;
+        top: 1rem;
+        left: 1rem;
+        right: 1rem;
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        background: rgba(254, 240, 138, 0.95);
+        border: 1px solid rgba(202, 138, 4, 0.4);
+        padding: 0.65rem 0.85rem;
+        border-radius: 10px;
+        box-shadow: 0 8px 18px rgba(202, 138, 4, 0.25);
+        color: #713f12;
+        z-index: 20;
+      }
+      .reauth-banner strong {
+        display: block;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+      .reauth-banner .reauth-detail {
+        font-size: 0.8rem;
+        opacity: 0.85;
+        margin-top: 0.15rem;
+      }
+      .reauth-banner .reauth-link {
+        flex-shrink: 0;
+        background: #f59e0b;
+        color: #1f2937;
+        font-weight: 600;
+        padding: 0.45rem 0.75rem;
+        border-radius: 8px;
+        text-decoration: none;
+        border: 1px solid rgba(120, 53, 15, 0.35);
+        box-shadow: 0 6px 12px rgba(120, 53, 15, 0.25);
+      }
+      .reauth-banner .reauth-link:hover {
+        background: #f97316;
+      }
       #heat-grid {
         display: grid;
         grid-template-columns: minmax(120px, 0.9fr) repeat(7, minmax(88px, 1fr));
@@ -728,6 +769,16 @@
           font-size: 1.05rem;
           line-height: 1;
         }
+        .reauth-banner {
+          position: static;
+          margin: 0.4rem 0.1rem 0.6rem;
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .reauth-banner .reauth-link {
+          width: 100%;
+          text-align: center;
+        }
         #legend {
           display: none;
         }
@@ -800,6 +851,16 @@
         }
         .account-indicator a {
           color: #f1f5f9;
+        }
+        .reauth-banner {
+          background: rgba(217, 119, 6, 0.2);
+          border-color: rgba(245, 158, 11, 0.5);
+          color: #fcd34d;
+        }
+        .reauth-banner .reauth-link {
+          background: rgba(245, 158, 11, 0.85);
+          color: #0f172a;
+          border-color: rgba(217, 119, 6, 0.4);
         }
         .week-group {
           background: rgba(30, 41, 59, 0.85);
@@ -933,6 +994,13 @@
     </style>
   </head>
   <body>
+    <div class="reauth-banner" id="reauth-banner" role="alert" style="display: none;">
+      <div>
+        <strong id="reauth-message"></strong>
+        <span id="reauth-detail" class="reauth-detail" style="display: none;"></span>
+      </div>
+      <a id="reauth-action" class="reauth-link" href="/settings.html">Reconnect</a>
+    </div>
     <div class="account-indicator" id="account-indicator" style="display: none;">
       <span id="account-email"></span>
       <a href="/settings.html" class="settings-btn" aria-label="Account settings" title="Account settings">⚙️</a>
@@ -1028,6 +1096,48 @@
         }
       }
 
+      function resolveReauthAction(provider) {
+        switch (provider) {
+          case "google":
+            return { href: `${workerOrigin}/auth/google/start`, label: "Reconnect" };
+          case "outlook":
+            return { href: `${workerOrigin}/auth/outlook/start`, label: "Reconnect" };
+          case "caldav":
+            return { href: "/settings.html#apple", label: "Open settings" };
+          default:
+            return { href: "/settings.html", label: "Reconnect" };
+        }
+      }
+
+      function showReauthBanner(info) {
+        if (!reauthBanner || !reauthMessageEl || !reauthActionEl) return;
+        const provider = info?.provider || "calendar";
+        const label = providerLabels[provider] || "calendar";
+        reauthMessageEl.textContent = `Reconnect your ${label} to resume updates.`;
+
+        const action = resolveReauthAction(provider);
+        reauthActionEl.href = action.href;
+        reauthActionEl.textContent = action.label;
+
+        if (reauthDetailEl) {
+          if (info?.reason) {
+            reauthDetailEl.textContent = info.reason;
+            reauthDetailEl.style.display = "block";
+          } else {
+            reauthDetailEl.textContent = "";
+            reauthDetailEl.style.display = "none";
+          }
+        }
+
+        reauthBanner.style.display = "flex";
+      }
+
+      function hideReauthBanner() {
+        if (reauthBanner) {
+          reauthBanner.style.display = "none";
+        }
+      }
+
       const palette = [
         "#F1F5F9",
         "#DCFCE7",
@@ -1047,6 +1157,11 @@
       const segmentHeaderLabels = {
         morning: "AM (9-12)",
         evening: "PM (6-10)"
+      };
+      const providerLabels = {
+        google: "Google Calendar",
+        outlook: "Outlook Calendar",
+        caldav: "Apple Calendar"
       };
 
       function formatAvailabilityDisplay(count, useEmoji = false) {
@@ -1094,6 +1209,10 @@
       const prevWeekBtn = document.getElementById("prev-week");
       const nextWeekBtn = document.getElementById("next-week");
       const weekTitle = document.getElementById("week-title");
+      const reauthBanner = document.getElementById("reauth-banner");
+      const reauthMessageEl = document.getElementById("reauth-message");
+      const reauthDetailEl = document.getElementById("reauth-detail");
+      const reauthActionEl = document.getElementById("reauth-action");
 
       let currentWeekIndex = 0;
       let totalWeeks = 0;
@@ -1861,11 +1980,24 @@
           if (!response.ok) return;
 
           const data = await response.json();
-          if (data.ok && data.email) {
-            localStorage.setItem('user_email', data.email);
+          if (data.ok) {
+            if (data.email) {
+              localStorage.setItem('user_email', data.email);
+            }
+            if (data.needsReconnect) {
+              showReauthBanner({
+                provider: data.provider,
+                reason: data.reauthReason
+              });
+            } else {
+              hideReauthBanner();
+            }
+          } else {
+            hideReauthBanner();
           }
         } catch (error) {
           console.error('Failed to load user info:', error);
+          hideReauthBanner();
         }
       }
 

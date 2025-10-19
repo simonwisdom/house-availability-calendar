@@ -781,6 +781,9 @@ async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionCo
              calendar_id = ?,
              refresh_token_encrypted = ?,
              last_auth_at = ?,
+             reauth_required = 0,
+             reauth_required_reason = NULL,
+             reauth_required_at = NULL,
              updated_at = ?
          WHERE id = ?`
       )
@@ -798,8 +801,21 @@ async function handleGoogleCallback(request: Request, env: Env, ctx: ExecutionCo
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO users (id, email, display_name, provider, calendar_id, refresh_token_encrypted, last_auth_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'google', ?, ?, ?, ?, ?)`
+        `INSERT INTO users (
+           id,
+           email,
+           display_name,
+           provider,
+           calendar_id,
+           refresh_token_encrypted,
+           last_auth_at,
+           created_at,
+           updated_at,
+           reauth_required,
+           reauth_required_reason,
+           reauth_required_at
+         )
+         VALUES (?, ?, ?, 'google', ?, ?, ?, ?, ?, 0, NULL, NULL)`
       )
         .bind(
           userId,
@@ -1003,6 +1019,9 @@ async function handleOutlookCallback(request: Request, env: Env, ctx: ExecutionC
              calendar_id = ?,
              refresh_token_encrypted = ?,
              last_auth_at = ?,
+             reauth_required = 0,
+             reauth_required_reason = NULL,
+             reauth_required_at = NULL,
              updated_at = ?
          WHERE id = ?`
       )
@@ -1013,8 +1032,21 @@ async function handleOutlookCallback(request: Request, env: Env, ctx: ExecutionC
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO users (id, email, display_name, provider, calendar_id, refresh_token_encrypted, last_auth_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'outlook', ?, ?, ?, ?, ?)`
+        `INSERT INTO users (
+           id,
+           email,
+           display_name,
+           provider,
+           calendar_id,
+           refresh_token_encrypted,
+           last_auth_at,
+           created_at,
+           updated_at,
+           reauth_required,
+           reauth_required_reason,
+           reauth_required_at
+         )
+         VALUES (?, ?, ?, 'outlook', ?, ?, ?, ?, ?, 0, NULL, NULL)`
       )
         .bind(userId, email, displayName, primaryCalendarId, tokens.refresh_token, nowIso, nowIso, nowIso)
         .run();
@@ -1216,9 +1248,25 @@ async function handleGetUserInfo(request: Request, env: Env): Promise<Response> 
     }
 
     // Fetch user info from database
-    const user = await env.DB.prepare("SELECT email, display_name FROM users WHERE id = ?")
+    const user = await env.DB.prepare(
+      `SELECT email,
+              display_name,
+              provider,
+              reauth_required,
+              reauth_required_reason,
+              reauth_required_at
+         FROM users
+        WHERE id = ?`
+    )
       .bind(session.userId)
-      .first<{ email: string; display_name: string }>();
+      .first<{
+        email: string;
+        display_name: string;
+        provider: string;
+        reauth_required: number;
+        reauth_required_reason: string | null;
+        reauth_required_at: string | null;
+      }>();
 
     if (!user) {
       return jsonWithCors({ ok: false, error: "User not found" }, request, 404);
@@ -1248,13 +1296,20 @@ async function handleGetUserInfo(request: Request, env: Env): Promise<Response> 
 
     const contributors = contributorRows?.map((row) => row.email) || [];
 
-    return jsonWithCors({
-      ok: true,
-      email: user.email,
-      displayName: user.display_name,
-      calendars,
-      contributors,
-    }, request);
+    return jsonWithCors(
+      {
+        ok: true,
+        email: user.email,
+        displayName: user.display_name,
+        calendars,
+        contributors,
+        needsReconnect: user.reauth_required === 1,
+        provider: user.provider,
+        reauthReason: user.reauth_required_reason,
+        reauthRequestedAt: user.reauth_required_at,
+      },
+      request
+    );
   } catch (error) {
     console.error("Get user info error:", error);
     return jsonWithCors({ ok: false, error: "Failed to get user info" }, request, 500);
@@ -1375,6 +1430,9 @@ async function handleSelectCalendars(request: Request, env: Env): Promise<Respon
              caldav_username = ?,
              refresh_token_encrypted = ?,
              last_auth_at = ?,
+             reauth_required = 0,
+             reauth_required_reason = NULL,
+             reauth_required_at = NULL,
              updated_at = ?
          WHERE id = ?`
       )
@@ -1395,8 +1453,23 @@ async function handleSelectCalendars(request: Request, env: Env): Promise<Respon
       await env.DB.prepare("DELETE FROM user_calendars WHERE user_id = ?").bind(userId).run();
     } else {
       await env.DB.prepare(
-        `INSERT INTO users (id, email, display_name, provider, calendar_id, caldav_url, caldav_username, refresh_token_encrypted, last_auth_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO users (
+           id,
+           email,
+           display_name,
+           provider,
+           calendar_id,
+           caldav_url,
+           caldav_username,
+           refresh_token_encrypted,
+           last_auth_at,
+           created_at,
+           updated_at,
+           reauth_required,
+           reauth_required_reason,
+           reauth_required_at
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL)`
       )
         .bind(
           userId,
